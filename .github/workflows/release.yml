@@ -5,40 +5,80 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: 6.0.x
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            nuget.config
 
-    - name: Restore dependencies
-      run: dotnet restore --source "https://api.nuget.org/v3/index.json" --source "https://www.myget.org/F/emby/api/v3/index.json"
+      - name: Verify tag matches project version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c 'import xml.etree.ElementTree as ET; print(ET.parse("Emby.Subtitle.ThunderCat.csproj").getroot().findtext("PropertyGroup/Version"))')"
+          test "${GITHUB_REF_NAME}" = "v${VERSION}"
 
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
+      - name: Restore release baseline
+        run: dotnet restore Emby.Subtitle.ThunderCat.sln -p:EmbySdkVersion=4.8.11
 
-    - name: Publish
-      run: dotnet publish --configuration Release --no-build --output ./publish
+      - name: Build and test release baseline
+        run: dotnet test Emby.Subtitle.ThunderCat.sln --configuration Release --no-restore -p:EmbySdkVersion=4.8.11 --warnaserror
 
-    - name: Zip Artifacts
-      run: |
-        cd publish
-        zip -r ../Emby.Subtitle.ThunderCat.zip *
-        cd ..
+      - name: Package allowlisted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          DLL="bin/Release/netstandard2.0/Emby.Subtitle.ThunderCat.dll"
+          test -f "${DLL}"
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: Emby.Subtitle.ThunderCat.zip
-        generate_release_notes: true
+          mkdir -p artifacts/package
+          cp "${DLL}" artifacts/package/
+
+          ZIP="artifacts/Emby.Subtitle.ThunderCat-${GITHUB_REF_NAME}.zip"
+          (cd artifacts/package && zip -X -9 "../$(basename "${ZIP}")" Emby.Subtitle.ThunderCat.dll)
+
+          test "$(unzip -Z1 "${ZIP}")" = "Emby.Subtitle.ThunderCat.dll"
+          (cd artifacts && sha256sum "$(basename "${ZIP}")" > "$(basename "${ZIP}").sha256")
+
+      - name: Upload tested release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: |
+            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip
+            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip.sha256
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip
+            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip.sha256
+          generate_release_notes: true

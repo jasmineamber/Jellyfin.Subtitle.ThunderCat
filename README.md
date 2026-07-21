@@ -1,67 +1,115 @@
 # ThunderCat Subtitles for Emby
 
-<div align="center">
+English | [中文](./README_CN.md)
 
-![ThunderCat Logo](https://img.shields.io/badge/Emby-Plugin-green.svg) ![License](https://img.shields.io/badge/License-MIT-blue.svg)
+ThunderCat connects Emby to **SubtitleCat** and **Thunder (Xunlei)** for subtitle search and download.
 
-[**English**](./README.md) | [**中文说明**](./README_CN.md)
+It supports multilingual search, title matching, language normalization, file-ID extraction, and CID matching against local files.
 
-</div>
+> ThunderCat does not host media files or subtitles. Search results and subtitle files are supplied by third-party services.
 
-**ThunderCat Subtitles** is a high-performance, lightweight Emby plugin that integrates **SubtitleCat** and **Thunder (Xunlei)** subtitle providers. Engineered for stability and accuracy, it features a zero-dependency architecture and smart media ID extraction.
+![ThunderCat configuration page](./docs/images/configuration-page.png)
 
-## ✨ Key Features
+## Features
 
--   **🚀 Zero Dependencies**:  
-    -   Built with pure .NET Standard 2.0. No `HtmlAgilityPack` or `System.Text.Json` required.
-    -   Eliminates "Assembly Not Found" errors common in Emby plugins.
-    -   Uses highly optimized Regex for HTML and JSON parsing.
+- Search multilingual subtitles through SubtitleCat and rank results by title similarity.
+- Search Thunder and improve matching with local-file CID data.
+- Use release or catalog identifiers found in filenames as additional search hints.
+- Normalize common Chinese, English, Japanese, Korean, and other language metadata.
+- Support `srt`, `ass`, `ssa`, and `vtt` subtitle formats.
+- Enable SubtitleCat and Thunder independently.
+- Test provider connectivity and copy privacy-safe diagnostics from the configuration page.
 
--   **🎯 Smart Media ID Extraction**:  
-    -   Automatically detects and extracts unique media identifiers (e.g., `ABC-123`, `STUDIO-001`, `EP-01`) from complex filenames.
-    -   Filters out noise to ensure precise subtitle matching for specific media releases.
+## Security design
 
--   **🌏 Dual Provider Integration**:  
-    -   **SubtitleCat**: Excellent multi-language support with intelligent Jaccard similarity sorting.
-    -   **Thunder (Xunlei)**: High-speed delivery infrastructure, optimized for Asian content.
+- Short-lived opaque download tokens avoid exposing upstream URLs in subtitle IDs.
+- Requests are restricted to HTTPS, explicit host allowlists, port 443, and public IP addresses.
+- Redirect targets are revalidated on every hop to reduce SSRF risk.
+- Network requests use total timeouts, bounded retries, and response-size limits.
+- Downloaded content is checked to reject HTML/JSON error pages and disguised archives.
+- Diagnostics exclude media paths, search queries, and download URLs.
 
--   **💎 Native Integration**:  
-    -   Seamlessly integrates with Emby's subtitle search engine.
-    -   Supports manual search, automated downloads, and scheduled tasks.
-    -   Base64 encoding ensures compatibility with all Emby versions (fixes URL path issues).
+## Compatibility
 
-## 🚀 What's New in v1.1.0
+| Item | Status |
+|---|---|
+| Target framework | `netstandard2.0` |
+| Release SDK baseline | `MediaBrowser.Server.Core 4.8.11` |
+| Emby Server 4.8.11.0 | Plugin loading verified; SDK build and tests pass |
+| Emby 4.9.x | SDK build and tests pass; real-server validation is still recommended |
+| Emby 4.10 Beta | Beta SDK build/test check only; not a stable compatibility claim |
 
--   **Thunder CID Matching**: Implemented "Perfect Match" logic. The plugin now hashes your local video files (SHA1) and matches them against Thunder's database for 100% accurate subtitles.
--   **Enhanced Connectivity**: Added smart retry logic and increased timeouts (30s) to solve network instability issues with API providers.
--   **Bug Fixes**: Resolved various compilation issues and timeout errors.
+Releases are built as a single DLL against the minimum supported SDK. Automated tests demonstrate source compatibility but do not replace real-server search, download, cancellation, and soak testing.
 
-## 📦 Installation
+## Installation
 
-1.  Download the latest `Emby.Subtitle.ThunderCat.dll` from the [Releases](https://github.com/drunkleee/Emby.Subtitle.ThunderCat/releases) page.
-2.  Copy the DLL file to your Emby server's `plugins` folder:
-    -   **Linux/Docker**: `/var/lib/emby/plugins` (or your mapped config volume)
-    -   **Windows**: `%AppData%\Emby-Server\programdata\plugins`
-3.  Restart Emby Server.
+1. Download the matching ZIP from Releases.
+2. Extract `Emby.Subtitle.ThunderCat.dll` into Emby's `plugins` directory.
+3. Restart Emby Server.
+4. Open **Plugins → ThunderCat Subtitles**, enable the providers you want, and save.
+5. Open **Library settings → Subtitle Downloads** and enable SubtitleCat and/or Thunder.
 
-## ⚙️ Usage
+Common plugin directories:
 
-1.  Go to **Emby Dashboard** -> **Plugins**.
-2.  Verify **ThunderCat Subtitles** is listed.
-3.  Go to **Library** -> **Metadata** -> **Subtitle Downloads**.
-4.  Enable **ThunderCat** and configure your preferred languages.
+- Linux / Docker: `/var/lib/emby/plugins`
+- Windows: `%AppData%\Emby-Server\programdata\plugins`
 
-## 🛠 Build from Source
+## Configuration page
 
-Requirements:
--   .NET SDK 6.0 or later
+The configuration page provides:
+
+- Global switches for SubtitleCat and Thunder.
+- Saved/unsaved state feedback.
+- Server-side connectivity tests for both providers.
+- Plugin version, Emby Server version, and compatibility baseline.
+- A diagnostic summary that excludes sensitive media information.
+
+Connectivity tests run on Emby Server and reuse the plugin's HTTPS, host-allowlist, and public-address validation. A successful test confirms that the upstream is currently reachable; it does not guarantee subtitles for a particular title.
+
+## FAQ
+
+### Does it support filenames with release or catalog identifiers?
+
+Yes. When a filename contains a letter-and-number identifier, ThunderCat can use it as an additional search hint.
+
+### Why must a provider be enabled in two places?
+
+The plugin page controls the global provider switch. Emby's library subtitle-download settings decide whether a particular library uses that provider. Both must be enabled for the provider to participate in searches.
+
+### Connectivity succeeds, but why are there no results?
+
+The connectivity test only confirms that the upstream can be reached. Results still depend on the title, identifier, requested language, upstream inventory, and upstream protocol compatibility.
+
+## Build and test
+
+The full solution test suite uses .NET SDK 10:
 
 ```bash
-git clone https://github.com/drunkleee/Emby.Subtitle.ThunderCat.git
-cd Emby.Subtitle.ThunderCat
-dotnet build -c Release
+dotnet restore Emby.Subtitle.ThunderCat.sln
+dotnet test Emby.Subtitle.ThunderCat.sln -c Release
 ```
 
-## 📄 License
+Build the release DLL against the Emby 4.8.11 SDK baseline:
+
+```bash
+dotnet build Emby.Subtitle.ThunderCat.csproj \
+  -c Release \
+  -p:EmbySdkVersion=4.8.11
+```
+
+Output:
+
+```text
+bin/Release/netstandard2.0/Emby.Subtitle.ThunderCat.dll
+```
+
+## Known boundaries
+
+- SubtitleCat and Thunder are third-party upstreams whose contracts and availability may change.
+- Upstream domain migrations require a security review before allowlists are updated.
+- DNS validation reduces SSRF risk, but production deployments should still enforce host/container egress policies.
+- The project cannot guarantee subtitle availability and does not bypass upstream access restrictions.
+
+## License
 
 MIT License © 2026 drunkleee

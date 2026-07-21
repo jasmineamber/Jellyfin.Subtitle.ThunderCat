@@ -1,184 +1,646 @@
-<!DOCTYPE html>
-<html>
-
-<head>
-    <title>ThunderCat Subtitles</title>
+<div data-role="page" class="view type-interior pluginConfigurationPage thunderCatConfigurationPage"
+    data-controller="__plugin/thundercatconfigjs" data-require="emby-button,emby-checkbox">
     <style>
-        .thundercat-container {
-            max-width: 800px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        .thunderCatConfigurationPage {
+            --tc-accent: #52b54b;
+            --tc-accent-strong: #318a3d;
+            --tc-accent-soft: rgba(82, 181, 75, 0.11);
+            --tc-danger: #d94b4b;
+            --tc-info: #3a78c2;
+            --tc-warning: #a66a13;
+            --tc-text: inherit;
+            --tc-muted: rgba(127, 127, 127, 0.9);
+            --tc-surface: rgba(127, 127, 127, 0.06);
+            --tc-surface-soft: rgba(127, 127, 127, 0.08);
+            --tc-border: rgba(127, 127, 127, 0.22);
+            --tc-shadow: none;
+            color: var(--tc-text);
+        }
+
+        .theme-light .thunderCatConfigurationPage {
+            --tc-text: #202521;
+            --tc-muted: #68716b;
+            --tc-surface: #ffffff;
+            --tc-surface-soft: #f5f7f5;
+            --tc-border: #dfe4df;
+            --tc-shadow: 0 12px 36px rgba(26, 43, 31, 0.07);
+        }
+
+        .theme-dark .thunderCatConfigurationPage {
+            --tc-text: rgba(255, 255, 255, 0.92);
+            --tc-muted: rgba(255, 255, 255, 0.58);
+            --tc-surface: rgba(255, 255, 255, 0.055);
+            --tc-surface-soft: rgba(255, 255, 255, 0.045);
+            --tc-border: rgba(255, 255, 255, 0.12);
+            --tc-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+        }
+
+        .thundercat-container.content-primary {
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 32px 24px 48px;
+            color: var(--tc-text);
         }
 
         .thundercat-header {
             display: flex;
             align-items: center;
-            gap: 16px;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 28px;
         }
 
-        .thundercat-logo {
-            font-size: 48px;
+        .thundercat-brand {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            gap: 14px;
+        }
+
+        .thundercat-mark {
+            display: grid;
+            place-items: center;
+            width: 46px;
+            height: 46px;
+            flex: 0 0 46px;
+            border-radius: 13px;
+            background: linear-gradient(145deg, #65c95c 0%, #329446 100%);
+            box-shadow: 0 10px 24px rgba(55, 145, 68, 0.24);
+            color: #fff;
+        }
+
+        .thundercat-mark svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .thundercat-title-row {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .thundercat-title h1 {
             margin: 0;
-            font-size: 24px;
+            font-size: 25px;
+            font-weight: 650;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+        }
+
+        .thundercat-version {
+            color: var(--tc-muted);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .thundercat-subtitle {
+            margin: 5px 0 0;
+            color: var(--tc-muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .thundercat-header-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .thundercat-header-links a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            box-sizing: border-box;
+            padding: 7px 11px;
+            border: 1px solid var(--tc-border);
+            border-radius: 9px;
+            color: var(--tc-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 160ms ease-out, border-color 160ms ease-out, background-color 160ms ease-out;
+        }
+
+        .thundercat-header-links a:hover {
+            border-color: rgba(82, 181, 75, 0.55);
+            background: var(--tc-accent-soft);
+            color: var(--tc-accent-strong);
+        }
+
+        .thundercat-header-links a:active {
+            transform: scale(0.98);
+        }
+
+        .thundercat-layout {
+            display: flex;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .thundercat-main,
+        .thundercat-sidebar {
+            display: grid;
+            gap: 20px;
+            min-width: 0;
+        }
+
+        .thundercat-main {
+            flex: 1.65 1 620px;
+        }
+
+        .thundercat-sidebar {
+            flex: 0.82 1 280px;
+        }
+
+        .thunderCatConfigurationForm {
+            width: 100%;
+            max-width: none;
+        }
+
+        .thundercat-panel {
+            box-sizing: border-box;
+            padding: 22px;
+            border: 1px solid var(--tc-border);
+            border-radius: 15px;
+            background: var(--tc-surface);
+            box-shadow: var(--tc-shadow);
+        }
+
+        .thundercat-section-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .thundercat-panel h2 {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 650;
+            letter-spacing: -0.01em;
+            line-height: 1.3;
+        }
+
+        .thundercat-section-heading p,
+        .thundercat-source-description,
+        .thundercat-note p,
+        .thundercat-muted {
+            color: var(--tc-muted);
+            font-size: 13px;
+            line-height: 1.65;
+        }
+
+        .thundercat-section-heading p {
+            margin: 5px 0 0;
+        }
+
+        .thundercat-sources {
+            border-top: 1px solid var(--tc-border);
+        }
+
+        .thundercat-source {
+            padding: 20px 0;
+        }
+
+        .thundercat-source + .thundercat-source {
+            border-top: 1px solid var(--tc-border);
+        }
+
+        .thundercat-source-top {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 18px;
+            min-width: 0;
+        }
+
+        .thundercat-source-toggle.checkboxContainer {
+            width: auto;
+            max-width: 100%;
+            min-width: 0;
+            margin: 0;
+            flex: 1 1 0%;
+            font-size: 15px;
             font-weight: 600;
         }
 
-        .thundercat-title .version {
-            color: #888;
-            font-size: 14px;
-            margin-top: 4px;
-        }
-
-        .thundercat-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .thundercat-card h3 {
-            margin: 0 0 12px 0;
+        .thundercat-source-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: flex-end;
+            max-width: 100%;
+            min-width: 0;
+            flex: 0 1 auto;
+            gap: 14px;
         }
 
-        .thundercat-card h3 .icon {
-            font-size: 24px;
+        .thundercat-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 22px;
+            padding: 0;
+            background: transparent;
+            color: var(--tc-muted);
+            font-size: 12px;
+            white-space: nowrap;
         }
 
-        .thundercat-card p {
+        .thundercat-status::before {
+            width: 6px;
+            height: 6px;
+            flex: 0 0 6px;
+            border-radius: 999px;
+            background: currentColor;
+            content: '';
+        }
+
+        .thundercat-status[data-state="ok"] {
+            color: var(--tc-accent-strong);
+        }
+
+        .thundercat-status[data-state="error"] {
+            color: var(--tc-danger);
+        }
+
+        .thundercat-status[data-state="testing"] {
+            color: var(--tc-info);
+        }
+
+        .thundercat-status[data-state="dirty"] {
+            color: var(--tc-warning);
+        }
+
+        .thundercat-test-button,
+        .thundercat-save-button,
+        .thundercat-copy-button {
+            margin: 0 !important;
+        }
+
+        .thundercat-test-button {
+            min-width: 90px;
+        }
+
+        .thundercat-source-description {
+            max-width: 590px;
+            margin: 9px 0 0 34px;
+        }
+
+        .thundercat-capabilities {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 7px 18px;
+            margin: 11px 0 0 34px;
+            padding: 0;
+            color: var(--tc-muted);
+            font-size: 12px;
+            list-style: none;
+        }
+
+        .thundercat-capabilities li {
+            position: relative;
+            padding-left: 11px;
+        }
+
+        .thundercat-capabilities li::before {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--tc-accent);
+            content: '';
+            transform: translateY(-50%);
+        }
+
+        .thundercat-note {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: start;
+            gap: 10px 14px;
+            margin-top: 2px;
+            padding: 14px 15px;
+            border-radius: 11px;
+            background: var(--tc-surface-soft);
+        }
+
+        .thundercat-note-mark {
+            display: grid;
+            place-items: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 8px;
+            background: var(--tc-accent-soft);
+            color: var(--tc-accent-strong);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .thundercat-note strong {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .thundercat-note p {
             margin: 0;
-            color: #aaa;
+        }
+
+        .thundercat-configuration-hint {
+            margin: 17px 0 0;
+            color: var(--tc-muted);
+            font-size: 12px;
             line-height: 1.6;
         }
 
-        .thundercat-features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-top: 16px;
-        }
-
-        .thundercat-feature {
-            background: rgba(82, 196, 26, 0.1);
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 14px;
-        }
-
-        .thundercat-feature .check {
-            color: #52c41a;
-            margin-right: 8px;
-        }
-
-        .thundercat-usage {
-            background: rgba(24, 144, 255, 0.1);
-            border-left: 4px solid #1890ff;
-        }
-
-        .thundercat-usage h3 {
-            color: #1890ff;
-        }
-
-        .thundercat-usage ol {
-            margin: 0;
-            padding-left: 20px;
-            color: #aaa;
-            line-height: 2;
-        }
-
-        .thundercat-links {
+        .thundercat-save-row {
             display: flex;
-            gap: 12px;
-            margin-top: 24px;
-        }
-
-        .thundercat-links a {
-            display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 10px 16px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            color: inherit;
-            text-decoration: none;
-            font-size: 14px;
-            transition: background 0.2s;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid var(--tc-border);
         }
 
-        .thundercat-links a:hover {
-            background: rgba(255, 255, 255, 0.15);
+        .thundercat-save-button {
+            min-width: 132px;
+        }
+
+        .thundercat-runtime {
+            display: grid;
+        }
+
+        .thundercat-runtime-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            padding: 11px 0;
+            border-bottom: 1px solid var(--tc-border);
+            font-size: 13px;
+        }
+
+        .thundercat-runtime-row:first-child {
+            padding-top: 0;
+        }
+
+        .thundercat-runtime-row:last-child {
+            padding-bottom: 0;
+            border-bottom: 0;
+        }
+
+        .thundercat-runtime-label {
+            color: var(--tc-muted);
+        }
+
+        .thundercat-runtime-value {
+            min-width: 0;
+            text-align: right;
+            overflow-wrap: anywhere;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .thundercat-diagnostics {
+            display: grid;
+            gap: 12px;
+            margin-top: 18px;
+            padding-top: 17px;
+            border-top: 1px solid var(--tc-border);
+        }
+
+        .thundercat-diagnostics .thundercat-muted {
+            margin: 0;
+        }
+
+        .thundercat-copy-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .thundercat-steps {
+            display: grid;
+            gap: 16px;
+            margin: 18px 0 0;
+            padding: 0;
+            list-style: none;
+            counter-reset: thundercat-step;
+        }
+
+        .thundercat-steps li {
+            display: grid;
+            grid-template-columns: 24px minmax(0, 1fr);
+            align-items: start;
+            gap: 11px;
+            color: var(--tc-muted);
+            font-size: 13px;
+            line-height: 1.55;
+            counter-increment: thundercat-step;
+        }
+
+        .thundercat-steps li::before {
+            display: grid;
+            place-items: center;
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--tc-border);
+            border-radius: 8px;
+            color: var(--tc-text);
+            font-size: 11px;
+            font-weight: 650;
+            content: counter(thundercat-step);
+        }
+
+        .thundercat-steps strong {
+            color: var(--tc-text);
+            font-weight: 600;
+        }
+
+        @media (max-width: 640px) {
+            .thundercat-container.content-primary {
+                padding: 22px 14px 36px;
+            }
+
+            .thundercat-header,
+            .thundercat-save-row {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .thundercat-source-top {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .thundercat-header-links {
+                align-self: flex-start;
+            }
+
+            .thundercat-source-actions {
+                justify-content: space-between;
+                padding-left: 34px;
+            }
+
+            .thundercat-save-button {
+                width: 100%;
+                justify-content: center;
+            }
         }
     </style>
-</head>
 
-<body>
-    <div data-role="page" class="type-interior pluginConfigurationPage oneOneFiveMasterConfigurationPage"
-        data-require="emby-button">
-        <div data-role="content">
-            <div class="content-primary thundercat-container">
-
-                <div class="thundercat-header">
-                    <div class="thundercat-logo">⚡🐱</div>
+    <div data-role="content">
+        <div class="content-primary thundercat-container">
+            <header class="thundercat-header">
+                <div class="thundercat-brand">
+                    <div class="thundercat-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M13.2 2 5.7 13h5.1L9.9 22 18.3 10h-5.2L13.2 2Z"></path>
+                        </svg>
+                    </div>
                     <div class="thundercat-title">
-                        <h1>ThunderCat Subtitles</h1>
-                        <div class="version">Version 1.0.0 • by drunkleee</div>
+                        <div class="thundercat-title-row">
+                            <h1>ThunderCat Subtitles</h1>
+                            <span class="thundercat-version">v<span data-role="plugin-version">—</span></span>
+                        </div>
+                        <p class="thundercat-subtitle">SubtitleCat 与 Thunder 字幕检索</p>
                     </div>
                 </div>
+                <nav class="thundercat-header-links" aria-label="项目链接">
+                    <a href="https://github.com/drunkleee/Emby.Subtitle.ThunderCat" target="_blank"
+                        rel="noopener noreferrer">GitHub ↗</a>
+                    <a href="https://github.com/drunkleee/Emby.Subtitle.ThunderCat/issues" target="_blank"
+                        rel="noopener noreferrer">反馈 ↗</a>
+                </nav>
+            </header>
 
-                <div class="thundercat-card">
-                    <h3><span class="icon">🌐</span> SubtitleCat Provider</h3>
-                    <p>从 subtitlecat.com 搜索多语言字幕，支持超过 100 种语言。自动按 Jaccard 相似度排序，优先匹配最相关的字幕。</p>
-                    <div class="thundercat-features">
-                        <div class="thundercat-feature"><span class="check">✓</span> 多语言支持</div>
-                        <div class="thundercat-feature"><span class="check">✓</span> 智能相似度排序</div>
-                        <div class="thundercat-feature"><span class="check">✓</span> 中文优先下载</div>
-                    </div>
-                </div>
+            <div class="thundercat-layout">
+                <main class="thundercat-main">
+                    <form class="thunderCatConfigurationForm thundercat-panel">
+                        <div class="thundercat-section-heading">
+                            <div>
+                                <h2>字幕源</h2>
+                                <p>选择要在 Emby 中使用的字幕服务。</p>
+                            </div>
+                        </div>
 
-                <div class="thundercat-card">
-                    <h3><span class="icon">⚡</span> Thunder (迅雷) Provider</h3>
-                    <p>使用迅雷字幕 API 搜索字幕，速度快，覆盖面广，特别适合中文资源。</p>
-                    <div class="thundercat-features">
-                        <div class="thundercat-feature"><span class="check">✓</span> 高速下载</div>
-                        <div class="thundercat-feature"><span class="check">✓</span> 中文资源丰富</div>
-                        <div class="thundercat-feature"><span class="check">✓</span> 支持番号搜索</div>
-                    </div>
-                </div>
+                        <div class="thundercat-sources">
+                            <section class="thundercat-source" data-provider-card="SubtitleCat">
+                                <div class="thundercat-source-top">
+                                    <label class="checkboxContainer thundercat-source-toggle">
+                                        <input is="emby-checkbox" type="checkbox" id="enableSubtitleCat" />
+                                        <span>SubtitleCat</span>
+                                    </label>
+                                    <div class="thundercat-source-actions">
+                                        <span class="thundercat-status" data-role="provider-status"
+                                            data-state="idle">未测试</span>
+                                        <button is="emby-button" type="button" class="raised thundercat-test-button"
+                                            data-action="test-provider" data-provider="SubtitleCat" disabled>测试连接</button>
+                                    </div>
+                                </div>
+                                <p class="thundercat-source-description">按标题搜索多语言字幕，并优先显示更接近的结果。</p>
+                                <ul class="thundercat-capabilities" aria-label="SubtitleCat 功能">
+                                    <li>多语言</li>
+                                    <li>标题匹配</li>
+                                    <li>语言规范化</li>
+                                </ul>
+                            </section>
 
-                <div class="thundercat-card">
-                    <h3><span class="icon">🎯</span> 智能番号提取</h3>
-                    <p>自动从文件名中提取番号（如 LULU-421、SONE-342、FC2-PPV-1234567），提高字幕搜索准确率。</p>
-                </div>
+                            <section class="thundercat-source" data-provider-card="Thunder">
+                                <div class="thundercat-source-top">
+                                    <label class="checkboxContainer thundercat-source-toggle">
+                                        <input is="emby-checkbox" type="checkbox" id="enableThunder" />
+                                        <span>Thunder</span>
+                                    </label>
+                                    <div class="thundercat-source-actions">
+                                        <span class="thundercat-status" data-role="provider-status"
+                                            data-state="idle">未测试</span>
+                                        <button is="emby-button" type="button" class="raised thundercat-test-button"
+                                            data-action="test-provider" data-provider="Thunder" disabled>测试连接</button>
+                                    </div>
+                                </div>
+                                <p class="thundercat-source-description">结合标题、文件编号和 CID 查找字幕，并优先返回更接近的结果。</p>
+                                <ul class="thundercat-capabilities" aria-label="Thunder 功能">
+                                    <li>中文资源检索</li>
+                                    <li>CID 匹配</li>
+                                    <li>文件编号识别</li>
+                                </ul>
+                            </section>
+                        </div>
 
-                <div class="thundercat-card thundercat-usage">
-                    <h3>📖 使用方法</h3>
-                    <ol>
-                        <li>进入 <b>媒体库设置</b> → <b>高级</b> → <b>字幕下载器</b></li>
-                        <li>勾选 <b>SubtitleCat</b> 和/或 <b>Thunder</b></li>
-                        <li>在视频详情页搜索字幕即可</li>
-                    </ol>
-                </div>
+                        <div class="thundercat-note">
+                            <span class="thundercat-note-mark" aria-hidden="true">ID</span>
+                            <div>
+                                <strong>文件编号识别</strong>
+                                <p>文件名中包含编号时，插件会把它作为额外的检索线索。</p>
+                            </div>
+                        </div>
 
-                <div class="thundercat-links">
-                    <a href="https://github.com/drunkleee/Emby.Subtitle.ThunderCat" target="_blank">
-                        <span>📦</span> GitHub 仓库
-                    </a>
-                    <a href="https://github.com/drunkleee/Emby.Subtitle.ThunderCat/issues" target="_blank">
-                        <span>🐛</span> 报告问题
-                    </a>
-                </div>
+                        <p class="thundercat-configuration-hint">
+                            保存后，请在对应媒体库的“字幕下载器”中启用同名字幕源。
+                        </p>
 
+                        <div class="thundercat-save-row">
+                            <span class="thundercat-status" data-role="save-status" data-state="idle">正在读取配置…</span>
+                            <button is="emby-button" type="submit"
+                                class="raised button-submit thundercat-save-button" data-role="save-button" disabled>
+                                <span>保存配置</span>
+                            </button>
+                        </div>
+                    </form>
+                </main>
+
+                <aside class="thundercat-sidebar">
+                    <section class="thundercat-panel">
+                        <div class="thundercat-section-heading">
+                            <div>
+                                <h2>运行信息</h2>
+                                <p>用于确认当前插件与服务端版本。</p>
+                            </div>
+                        </div>
+                        <div class="thundercat-runtime">
+                            <div class="thundercat-runtime-row">
+                                <span class="thundercat-runtime-label">插件版本</span>
+                                <span class="thundercat-runtime-value" data-role="runtime-plugin-version">—</span>
+                            </div>
+                            <div class="thundercat-runtime-row">
+                                <span class="thundercat-runtime-label">Emby Server</span>
+                                <span class="thundercat-runtime-value" data-role="runtime-server-version">—</span>
+                            </div>
+                            <div class="thundercat-runtime-row">
+                                <span class="thundercat-runtime-label">兼容基线</span>
+                                <span class="thundercat-runtime-value" data-role="runtime-baseline">—</span>
+                            </div>
+                        </div>
+                        <div class="thundercat-diagnostics">
+                            <p class="thundercat-muted" data-role="diagnostic-status">诊断信息不包含媒体路径、搜索词或下载地址。</p>
+                            <button is="emby-button" type="button" class="raised thundercat-copy-button"
+                                data-action="copy-diagnostics">复制诊断信息</button>
+                        </div>
+                    </section>
+
+                    <section class="thundercat-panel">
+                        <div class="thundercat-section-heading">
+                            <div>
+                                <h2>开始使用</h2>
+                                <p>完成以下三步即可搜索字幕。</p>
+                            </div>
+                        </div>
+                        <ol class="thundercat-steps">
+                            <li><span><strong>选择字幕源</strong><br />在本页启用并保存。</span></li>
+                            <li><span><strong>关联媒体库</strong><br />进入媒体库设置 → 字幕下载器。</span></li>
+                            <li><span><strong>搜索字幕</strong><br />启用同名字幕源后开始搜索。</span></li>
+                        </ol>
+                    </section>
+                </aside>
             </div>
         </div>
     </div>
-</body>
-
-</html>
+</div>

@@ -1,19 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using Emby.Subtitle.OneOneFiveMaster.Configuration;
+using Emby.Subtitle.ThunderCat.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
-using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Plugins;
+using MediaBrowser.Model.Serialization;
 
-namespace Emby.Subtitle.OneOneFiveMaster
+namespace Emby.Subtitle.ThunderCat
 {
-    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
+    public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
-        public override string Name => "ThunderCat Subtitles";
-        public override Guid Id => new Guid("9b7dca24-edf8-4155-bbd6-8c2b0f07448d"); // Using conversation GUID for uniqueness or a random one? Let's generate a random one to avoid confusion.
-        // Actually, let's use a fixed GUID: 
-        // 7c945417-578d-4299-b13c-74312270914d
+        private static readonly Guid PluginId = new Guid("9b7dca24-edf8-4155-bbd6-8c2b0f07448d");
 
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
             : base(applicationPaths, xmlSerializer)
@@ -23,6 +20,10 @@ namespace Emby.Subtitle.OneOneFiveMaster
 
         public static Plugin Instance { get; private set; } = null!;
 
+        public override string Name => "ThunderCat Subtitles";
+
+        public override Guid Id => PluginId;
+
         public IEnumerable<PluginPageInfo> GetPages()
         {
             return new[]
@@ -31,6 +32,11 @@ namespace Emby.Subtitle.OneOneFiveMaster
                 {
                     Name = Name,
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
+                },
+                new PluginPageInfo
+                {
+                    Name = "thundercatconfigjs",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.js"
                 }
             };
         }

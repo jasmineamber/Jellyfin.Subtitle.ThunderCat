@@ -1,16 +1,11 @@
 using MediaBrowser.Model.Plugins;
 
-namespace Emby.Subtitle.OneOneFiveMaster.Configuration
+namespace Emby.Subtitle.ThunderCat.Configuration
 {
-    public class PluginConfiguration : BasePluginConfiguration
+    public sealed class PluginConfiguration : BasePluginConfiguration
     {
         public bool EnableSubtitleCat { get; set; } = true;
-        public bool EnableThunder { get; set; } = true;
 
-        public PluginConfiguration()
-        {
-            EnableSubtitleCat = true;
-            EnableThunder = true;
-        }
+        public bool EnableThunder { get; set; } = true;
     }
 }

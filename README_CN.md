@@ -1,68 +1,115 @@
 # ThunderCat Subtitles for Emby
 
-<div align="center">
+[English](./README.md) | 中文
 
-![ThunderCat Logo](https://img.shields.io/badge/Emby-Plugin-green.svg) ![License](https://img.shields.io/badge/License-MIT-blue.svg)
+ThunderCat 是一个面向 Emby 的字幕检索插件，集成 **SubtitleCat** 与 **Thunder（迅雷）** 字幕源。
 
-[**English**](./README.md) | [**中文说明**](./README_CN.md)
+它支持多语言检索、标题匹配、语言规范化、文件编号识别和本地文件 CID 匹配。
 
-</div>
+> ThunderCat 不托管媒体文件或字幕。搜索结果和字幕文件由第三方服务提供。
 
-**ThunderCat Subtitles** 是一个高性能、轻量级的 Emby 字幕插件，集成了 **SubtitleCat** 和 **迅雷 (Thunder)** 字幕源。专为稳定性和精准度设计，采用零依赖架构和智能媒体 ID 提取技术。
+![ThunderCat 配置页](./docs/images/configuration-page.png)
 
-## ✨ 核心特性
+## 功能
 
--   **🚀 零依赖架构 (Zero-Dependency)**:  
-    -   基于纯 .NET Standard 2.0 开发。无需 `HtmlAgilityPack` 或 `System.Text.Json` 等第三方库。
-    -   彻底解决了 Emby 插件常见的 "Assembly Not Found" DLL 冲突问题。
-    -   使用高度优化的正则 (Regex) 引擎进行 HTML 和 JSON 解析，极速且稳定。
+- 通过 SubtitleCat 搜索多语言字幕，并按标题相似度排序。
+- 通过 Thunder 搜索字幕，并结合本地文件 CID 改进匹配。
+- 将文件名中的发行编号或目录编号作为额外检索线索。
+- 规范化中文、英文、日文、韩文等常用语言元数据。
+- 支持 `srt`、`ass`、`ssa`、`vtt` 字幕格式。
+- 可独立启用或关闭 SubtitleCat 与 Thunder。
+- 配置页支持连接测试、运行信息和安全诊断信息复制。
 
--   **🎯 智能媒体编码提取**:  
-    -   自动从复杂的文件名中提取唯一媒体编码（如 `ABC-123`, `STUDIO-001`, `EP-01`）。
-    -   智能过滤文件名中的无关信息，确保精准匹配特定版本的媒体资源。
-    -   特别优化了对包含字母+数字组合的媒体标识符的识别。
+## 安全设计
 
--   **🌏 双源整合**:  
-    -   **SubtitleCat**: 优秀的国际化字幕源，支持智能相似度排序，优先匹配中文字幕。
-    -   **迅雷 (Thunder)**: 国内高速节点，针对中文环境优化的字幕资源库。
+- 使用短期、不可猜测的下载令牌，不在字幕 ID 中暴露原始下载地址。
+- 仅访问 HTTPS、明确允许的域名、443 端口和公网地址。
+- 每次跳转都会重新校验目标地址，降低 SSRF 风险。
+- 网络请求具有总超时、有限重试和响应大小限制。
+- 下载内容会经过格式检查，拒绝 HTML、JSON 错误页和压缩包伪装。
+- 诊断信息不会包含媒体路径、搜索关键词或下载地址。
 
--   **💎 原生集成**:  
-    -   无缝集成到 Emby 的原生字幕搜索功能中。
-    -   支持手动搜索、自动下载和计划任务。
-    -   内置 Base64 编码处理，完美解决 URL 路径导致的下载失败问题。
+## 兼容性
 
-## 🚀 v1.1.0 更新日志
+| 项目 | 状态 |
+|---|---|
+| 目标框架 | `netstandard2.0` |
+| Release 构建基线 | `MediaBrowser.Server.Core 4.8.11` |
+| Emby Server 4.8.11.0 | 已验证插件加载；SDK 构建与测试通过 |
+| Emby 4.9.x | SDK 构建与测试通过，仍建议真实环境验证 |
+| Emby 4.10 Beta | Beta SDK 构建与测试检查，不视为稳定兼容认证 |
 
--   **Thunder CID 完美匹配**: 新增迅雷 CID 哈希匹配功能。插件会自动计算本地视频文件的 SHA1 哈希值，与迅雷数据库进行比对，实现 100% 精准的字幕匹配。
--   **连接性增强**: 针对 API 接口增加了智能重试机制和 30秒超时设置，有效解决了网络波动导致的搜索失败问题。
--   **问题修复**: 修复了若干编译错误和超时报错。
+Release 使用最低支持 SDK 构建单一 DLL。自动化测试可以证明源码兼容，但不能替代真实 Emby 环境中的搜索、下载和长期运行验证。
 
-## 📦 安装方法
+## 安装
 
-1.  从 [Releases](https://github.com/drunkleee/Emby.Subtitle.ThunderCat/releases) 页面下载最新的 `Emby.Subtitle.ThunderCat.dll`。
-2.  将 DLL 文件复制到 Emby 服务器的 `plugins` 目录：
-    -   **Linux/Docker**: `/var/lib/emby/plugins` (或者你映射的配置卷)
-    -   **Windows**: `%AppData%\Emby-Server\programdata\plugins`
-3.  重启 Emby 服务器。
+1. 从 Releases 下载对应版本的 ZIP。
+2. 解压并将 `Emby.Subtitle.ThunderCat.dll` 放入 Emby 的 `plugins` 目录。
+3. 重启 Emby Server。
+4. 打开 **插件 → ThunderCat Subtitles**，启用需要的字幕源并保存。
+5. 前往 **媒体库设置 → 字幕下载器**，勾选 SubtitleCat 和/或 Thunder。
 
-## ⚙️ 使用说明
+常见插件目录：
 
-1.  进入 **Emby 控制台** -> **插件**。
-2.  确认 **ThunderCat Subtitles** 已加载。
-3.  进入 **媒体库** -> **元数据** -> **字幕下载**。
-4.  勾选启用 **ThunderCat** 并设置你的首选字幕语言。
+- Linux / Docker：`/var/lib/emby/plugins`
+- Windows：`%AppData%\Emby-Server\programdata\plugins`
 
-## 🛠 源码构建
+## 配置页
 
-环境要求:
--   .NET SDK 6.0 或更高版本
+配置页包含：
+
+- SubtitleCat 与 Thunder 全局开关；
+- 保存状态和未保存更改提示；
+- 两个字幕源的服务端连接测试；
+- 插件版本、Emby Server 版本和兼容基线；
+- 不包含敏感媒体信息的诊断摘要。
+
+连接测试由 Emby Server 发起，并复用插件现有的域名白名单、HTTPS 和公网地址校验。它只用于判断上游当前是否可以访问，不代表某个具体标题一定有字幕结果。
+
+## 常见问题
+
+### 是否支持带有发行编号或目录编号的文件名？
+
+支持。文件名包含字母和数字组成的编号时，ThunderCat 会将它作为额外的检索线索。
+
+### 为什么插件配置页已经启用，字幕下载器里还需要再勾选？
+
+插件配置页控制全局开关；Emby 媒体库中的字幕下载器设置控制具体媒体库是否使用该 Provider。两处都启用后才会参与字幕搜索。
+
+### 连接测试成功，为什么仍然没有字幕？
+
+连接测试只确认上游服务可访问。搜索结果仍取决于媒体标题、编号、语言、上游库存以及上游协议是否发生变化。
+
+## 构建与测试
+
+完整解决方案测试使用 .NET SDK 10：
 
 ```bash
-git clone https://github.com/drunkleee/Emby.Subtitle.ThunderCat.git
-cd Emby.Subtitle.ThunderCat
-dotnet build -c Release
+dotnet restore Emby.Subtitle.ThunderCat.sln
+dotnet test Emby.Subtitle.ThunderCat.sln -c Release
 ```
 
-## 📄 许可证
+使用 Emby 4.8.11 SDK 构建发布 DLL：
+
+```bash
+dotnet build Emby.Subtitle.ThunderCat.csproj \
+  -c Release \
+  -p:EmbySdkVersion=4.8.11
+```
+
+编译产物：
+
+```text
+bin/Release/netstandard2.0/Emby.Subtitle.ThunderCat.dll
+```
+
+## 已知边界
+
+- SubtitleCat 与 Thunder 都是第三方上游，接口和可用性可能随时变化。
+- 上游迁移域名时，需要经过安全审查后更新域名白名单。
+- DNS 校验能够降低 SSRF 风险，但生产环境仍建议配置主机或容器出站网络策略。
+- 本项目不保证所有媒体都能检索到字幕，也不会绕过上游访问限制。
+
+## 许可证
 
 MIT License © 2026 drunkleee

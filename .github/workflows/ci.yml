@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Emby SDK ${{ matrix.emby_sdk }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emby_sdk:
+          - 4.8.11
+          - 4.9.1.90
+          - 4.10.0.1-beta
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            nuget.config
+
+      - name: Restore
+        run: dotnet restore Emby.Subtitle.ThunderCat.sln -p:EmbySdkVersion=${{ matrix.emby_sdk }}
+
+      - name: Build and test
+        run: dotnet test Emby.Subtitle.ThunderCat.sln --configuration Release --no-restore -p:EmbySdkVersion=${{ matrix.emby_sdk }} --warnaserror
