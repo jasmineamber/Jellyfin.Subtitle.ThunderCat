@@ -23,9 +23,17 @@ namespace Emby.Subtitle.ThunderCat.Utils
                 case "zh-hant":
                 case "zho":
                 case "chi":
+                case "chs":
+                case "cht":
+                case "简体":
+                case "繁体":
+                case "中文":
                     return "chi";
                 case "en":
                 case "eng":
+                case "英语":
+                case "英文":
+                case "english":
                     return "eng";
                 case "es":
                 case "spa":
@@ -46,9 +54,15 @@ namespace Emby.Subtitle.ThunderCat.Utils
                     return "por";
                 case "ja":
                 case "jpn":
+                case "日语":
+                case "日文":
+                case "japanese":
                     return "jpn";
                 case "ko":
                 case "kor":
+                case "韩语":
+                case "韩文":
+                case "korean":
                     return "kor";
                 case "ru":
                 case "rus":
@@ -61,20 +75,131 @@ namespace Emby.Subtitle.ThunderCat.Utils
         public static bool IsChinese(string? language) =>
             string.Equals(NormalizeForEmby(language), "chi", StringComparison.OrdinalIgnoreCase);
 
-        public static string ResolveReportedLanguage(string? requestedLanguage, IEnumerable<string>? reportedLanguages)
+        public static bool ReportsRequestedLanguage(
+            string? requestedLanguage,
+            IEnumerable<string>? reportedLanguages)
         {
-            if (reportedLanguages != null)
+            var requested = NormalizeForEmby(requestedLanguage);
+            if (reportedLanguages == null)
             {
-                foreach (var language in reportedLanguages)
+                return false;
+            }
+
+            foreach (var language in reportedLanguages)
+            {
+                foreach (var normalized in GetReportedLanguageCandidates(language))
                 {
-                    if (!string.IsNullOrWhiteSpace(language))
+                    if (string.Equals(normalized, requested, StringComparison.OrdinalIgnoreCase))
                     {
-                        return NormalizeForEmby(language);
+                        return true;
                     }
                 }
             }
 
-            return NormalizeForEmby(requestedLanguage);
+            return false;
+        }
+
+        public static string ResolveReportedLanguage(string? requestedLanguage, IEnumerable<string>? reportedLanguages)
+        {
+            var requested = NormalizeForEmby(requestedLanguage);
+            string? firstRecognized = null;
+            if (reportedLanguages != null)
+            {
+                foreach (var language in reportedLanguages)
+                {
+                    foreach (var normalized in GetReportedLanguageCandidates(language))
+                    {
+                        if (string.Equals(normalized, requested, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return requested;
+                        }
+
+                        if (firstRecognized == null)
+                        {
+                            firstRecognized = normalized;
+                        }
+                    }
+                }
+            }
+
+            return firstRecognized ?? requested;
+        }
+
+        private static IReadOnlyList<string> GetReportedLanguageCandidates(string? language)
+        {
+            if (string.IsNullOrWhiteSpace(language))
+            {
+                return Array.Empty<string>();
+            }
+
+            var value = language!.Trim();
+            if (value.Equals("默认", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("未知语言", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("SubtitleHandler", StringComparison.OrdinalIgnoreCase))
+            {
+                return Array.Empty<string>();
+            }
+
+            var candidates = new List<string>(2);
+            if (value.IndexOf("简体", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("繁体", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("中文", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Chinese", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                candidates.Add("chi");
+            }
+
+            if (value.IndexOf("英语", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("英文", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("English", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                candidates.Add("eng");
+            }
+
+            if (value.IndexOf("日语", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("日文", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Japanese", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                candidates.Add("jpn");
+            }
+
+            if (value.IndexOf("韩语", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("韩文", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Korean", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                candidates.Add("kor");
+            }
+
+            if (candidates.Count == 0)
+            {
+                var normalized = NormalizeForEmby(value);
+                if (IsKnownLanguage(normalized))
+                {
+                    candidates.Add(normalized);
+                }
+            }
+
+            return candidates;
+        }
+
+        private static bool IsKnownLanguage(string language)
+        {
+            switch (language.ToLowerInvariant())
+            {
+                case "chi":
+                case "eng":
+                case "spa":
+                case "fre":
+                case "ger":
+                case "ita":
+                case "por":
+                case "jpn":
+                case "kor":
+                case "rus":
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         public static IReadOnlyList<string> GetSubtitleCatCandidates(string? language)

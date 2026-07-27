@@ -17,11 +17,17 @@ namespace Emby.Subtitle.ThunderCat.Providers
     public sealed class SubtitleCatProvider : ISubtitleProvider
     {
         private const string ProviderKey = "SubtitleCat";
-                private const int SearchResponseLimit = 2 * 1024 * 1024;
+        private const int SearchResponseLimit = 2 * 1024 * 1024;
         private const int DetailResponseLimit = 2 * 1024 * 1024;
         private const int SubtitleResponseLimit = 8 * 1024 * 1024;
+        private const int ResultLimit = 10;
+        private const int MaximumCachedSearchCharacters = 256 * 1024;
         private static readonly Uri Domain = new Uri("https://subtitlecat.com/");
         private static readonly UrlPolicy SubtitleCatPolicy = new UrlPolicy("subtitlecat.com", "www.subtitlecat.com");
+        private static readonly ExpiringCache<string> SearchCache = new ExpiringCache<string>(
+            TimeSpan.FromMinutes(5),
+            16,
+            StringComparer.OrdinalIgnoreCase);
 
         private readonly ILogger _logger;
         private readonly DownloadTokenStore _tokenStore = DownloadTokenStore.Shared;
@@ -47,67 +53,70 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
-            var originalTitle = request.Name ?? string.Empty;
-            var keyword = MediaCodeExtractor.Extract(originalTitle) ?? originalTitle;
-            if (string.IsNullOrWhiteSpace(keyword))
+            var queryPlan = SearchQueryBuilder.Create(request.Name, request.MediaPath);
+            if (queryPlan.Queries.Count == 0)
             {
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
-            var requestedLanguage = string.IsNullOrWhiteSpace(request.Language) ? "zh-CN" : request.Language;
+            var requestedLanguage = LanguageNormalizer.NormalizeForEmby(request.Language);
 
             try
             {
-                var searchUri = new Uri(Domain, "index.php?search=" + Uri.EscapeDataString(keyword));
-                var html = await SafeHttpClient.GetStringAsync(
-                        searchUri,
-                        SubtitleCatPolicy,
-                        SearchResponseLimit,
-                        TimeSpan.FromSeconds(20),
-                        2,
-                        PluginMetadata.UserAgent,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                var candidates = new List<Tuple<SubtitleCatSearchItem, double>>();
-                foreach (var item in SubtitleCatHtmlParser.ParseSearchResults(html, Domain, 40))
+                var candidates = new List<RankedCandidate>();
+                for (var index = 0; index < queryPlan.Queries.Count; index++)
                 {
-                    try
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var queryCandidates = await SearchQueryAsync(
+                            queryPlan.Queries[index],
+                            queryPlan.RankingTitle,
+                            queryPlan.MediaCode,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    candidates.AddRange(queryCandidates);
+
+                    if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
+                            queryPlan.Queries[index],
+                            queryPlan.MediaCode,
+                            candidate.Match)))
                     {
-                        UrlSafetyValidator.ValidateSyntax(item.DetailUri, SubtitleCatPolicy);
+                        break;
                     }
-                    catch (SecurityException)
+                }
+
+                var deduplicator = new SubtitleResultDeduplicator();
+                var ordered = new List<RemoteSubtitleInfo>();
+                foreach (var candidate in candidates
+                             .Where(item => item.Match.IsEligible)
+                             .OrderByDescending(item => item.Match.Rank)
+                             .ThenBy(item => item.Item.Title, StringComparer.OrdinalIgnoreCase))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!deduplicator.TryAdd(candidate.Item.DetailUri))
                     {
                         continue;
                     }
 
-                    candidates.Add(Tuple.Create(
-                        item,
-                        Similarity.GetTitleSimilarity(originalTitle, item.Title)));
+                    ordered.Add(new RemoteSubtitleInfo
+                    {
+                        Id = _tokenStore.Create(new DownloadRequest(
+                            ProviderKey,
+                            candidate.Item.DetailUri,
+                            requestedLanguage,
+                            "srt")),
+                        Name = SearchResultMatcher.FormatDisplayName(candidate.Item.Title, candidate.Match.Kind),
+                        ProviderName = Name,
+                        Language = requestedLanguage,
+                        Format = "srt"
+                    });
+
+                    if (ordered.Count >= ResultLimit)
+                    {
+                        break;
+                    }
                 }
 
-                var normalizedLanguage = LanguageNormalizer.NormalizeForEmby(requestedLanguage);
-                var ordered = candidates
-                    .OrderByDescending(candidate => candidate.Item2)
-                    .Take(10)
-                    .Select(candidate =>
-                    {
-                        var item = candidate.Item1;
-                        return new RemoteSubtitleInfo
-                        {
-                            Id = _tokenStore.Create(new DownloadRequest(
-                                ProviderKey,
-                                item.DetailUri,
-                                normalizedLanguage,
-                                "srt")),
-                            Name = item.Title,
-                            ProviderName = Name,
-                            Language = normalizedLanguage,
-                            Format = "srt"
-                        };
-                    })
-                    .ToArray();
-                _logger.Info($"[SubtitleCat] Search completed with {ordered.Length} result(s).");
+                _logger.Info($"[SubtitleCat] Search completed with {ordered.Count} result(s).");
                 return ordered;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -147,7 +156,6 @@ namespace Emby.Subtitle.ThunderCat.Providers
                         PluginMetadata.UserAgent,
                         cancellationToken)
                     .ConfigureAwait(false);
-
                 var link = SubtitleCatHtmlParser.FindDownloadLink(html, request.Uri, request.Language);
                 if (link == null)
                 {
@@ -180,8 +188,8 @@ namespace Emby.Subtitle.ThunderCat.Providers
 
                 return new SubtitleResponse
                 {
-                    Language = link.Language,
                     Format = format,
+                    Language = link.Language,
                     Stream = new MemoryStream(bytes, false)
                 };
             }
@@ -194,6 +202,66 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 _logger.Error($"[SubtitleCat] Download failed: {ex.GetType().Name}.");
                 return new SubtitleResponse();
             }
+        }
+
+        private static async Task<IReadOnlyList<RankedCandidate>> SearchQueryAsync(
+            string query,
+            string originalTitle,
+            string? extractedCode,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!SearchCache.TryGet(query, out var html))
+            {
+                var searchUri = new Uri(Domain, "index.php?search=" + Uri.EscapeDataString(query));
+                html = await SafeHttpClient.GetStringAsync(
+                        searchUri,
+                        SubtitleCatPolicy,
+                        SearchResponseLimit,
+                        TimeSpan.FromSeconds(20),
+                        2,
+                        PluginMetadata.UserAgent,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (html.Length <= MaximumCachedSearchCharacters)
+                {
+                    SearchCache.Set(query, html);
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidates = new List<RankedCandidate>();
+            foreach (var item in SubtitleCatHtmlParser.ParseSearchResults(html, Domain, 40))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    UrlSafetyValidator.ValidateSyntax(item.DetailUri, SubtitleCatPolicy);
+                }
+                catch (SecurityException)
+                {
+                    continue;
+                }
+
+                candidates.Add(new RankedCandidate(
+                    item,
+                    SearchResultMatcher.Evaluate(originalTitle, item.Title, extractedCode, false)));
+            }
+
+            return candidates;
+        }
+
+        private sealed class RankedCandidate
+        {
+            public RankedCandidate(SubtitleCatSearchItem item, SearchMatch match)
+            {
+                Item = item;
+                Match = match;
+            }
+
+            public SubtitleCatSearchItem Item { get; }
+
+            public SearchMatch Match { get; }
         }
     }
 }

@@ -19,12 +19,18 @@ namespace Emby.Subtitle.ThunderCat.Providers
     public sealed class ThunderProvider : ISubtitleProvider
     {
         private const string ProviderKey = "Thunder";
-                private const int SearchResponseLimit = 1024 * 1024;
+        private const int SearchResponseLimit = 1024 * 1024;
         private const int SubtitleResponseLimit = 8 * 1024 * 1024;
+        private const int ResultLimit = 20;
+        private const int MaximumCachedSearchBytes = 512 * 1024;
         private static readonly Uri ApiEndpoint = new Uri("https://api-shoulei-ssl.xunlei.com/oracle/subtitle");
         private static readonly UrlPolicy ApiPolicy = new UrlPolicy("api-shoulei-ssl.xunlei.com");
         private static readonly UrlPolicy DownloadPolicy = new UrlPolicy("subtitle.v.geilijiasu.com");
         private static readonly SemaphoreSlim CidConcurrency = new SemaphoreSlim(2, 2);
+        private static readonly ExpiringCache<byte[]> SearchCache = new ExpiringCache<byte[]>(
+            TimeSpan.FromMinutes(5),
+            16,
+            StringComparer.OrdinalIgnoreCase);
 
         private readonly ILogger _logger;
         private readonly IJsonSerializer _jsonSerializer;
@@ -52,128 +58,77 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
-            var keyword = request.Name ?? string.Empty;
-            var extractedCode = MediaCodeExtractor.Extract(keyword);
-            var searchedByCode = !string.IsNullOrEmpty(extractedCode);
-            if (searchedByCode)
-            {
-                keyword = extractedCode!;
-            }
-
-            if (string.IsNullOrWhiteSpace(keyword))
+            var queryPlan = SearchQueryBuilder.Create(request.Name, request.MediaPath);
+            if (queryPlan.Queries.Count == 0)
             {
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
-            string? localCid = null;
-            if (!string.IsNullOrWhiteSpace(request.MediaPath) && File.Exists(request.MediaPath))
-            {
-                await CidConcurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    localCid = await ThunderCidCalculator.CalculateAsync(request.MediaPath, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn($"[Thunder] CID calculation failed: {ex.GetType().Name}.");
-                }
-                finally
-                {
-                    CidConcurrency.Release();
-                }
-            }
+            var requestedLanguage = LanguageNormalizer.NormalizeForEmby(request.Language);
+            var localCid = await GetLocalCidAsync(request.MediaPath, cancellationToken).ConfigureAwait(false);
 
             try
             {
-                var builder = new UriBuilder(ApiEndpoint)
+                var candidates = new List<RankedCandidate>();
+                for (var index = 0; index < queryPlan.Queries.Count; index++)
                 {
-                    Query = "name=" + Uri.EscapeDataString(keyword)
-                };
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var queryCandidates = await SearchQueryAsync(
+                            queryPlan.Queries[index],
+                            queryPlan.RankingTitle,
+                            queryPlan.MediaCode,
+                            localCid,
+                            requestedLanguage,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    candidates.AddRange(queryCandidates);
 
-                var responseBytes = await SafeHttpClient.GetBytesAsync(
-                        builder.Uri,
-                        ApiPolicy,
-                        SearchResponseLimit,
-                        TimeSpan.FromSeconds(20),
-                        2,
-                        PluginMetadata.UserAgent,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                ThunderSubtitleResponse payload;
-                using (var stream = new MemoryStream(responseBytes, false))
-                {
-                    payload = _jsonSerializer.DeserializeFromStream<ThunderSubtitleResponse>(stream);
+                    if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
+                            queryPlan.Queries[index],
+                            queryPlan.MediaCode,
+                            candidate.Match)))
+                    {
+                        break;
+                    }
                 }
 
-                if (payload == null || payload.Code != 0 || payload.Data == null)
+                var deduplicator = new SubtitleResultDeduplicator();
+                var ordered = new List<RemoteSubtitleInfo>();
+                foreach (var candidate in candidates
+                             .Where(item => item.Match.IsEligible)
+                             .OrderByDescending(item => item.Match.Rank)
+                             .ThenByDescending(item => item.MatchesRequestedLanguage)
+                             .ThenByDescending(item => item.UpstreamScore)
+                             .ThenBy(item => item.Item.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    _logger.Warn("[Thunder] Upstream response was unsuccessful or missing data.");
-                    return Array.Empty<RemoteSubtitleInfo>();
-                }
-
-                var requestedLanguage = LanguageNormalizer.NormalizeForEmby(request.Language);
-                var results = new List<Tuple<RemoteSubtitleInfo, long>>();
-
-                foreach (var item in payload.Data.Take(100))
-                {
-                    if (string.IsNullOrWhiteSpace(item.Name) ||
-                        string.IsNullOrWhiteSpace(item.Url) ||
-                        !Uri.TryCreate(item.Url, UriKind.Absolute, out var downloadUri))
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var name = candidate.Item.Name!;
+                    if (!deduplicator.TryAdd(candidate.DownloadUri))
                     {
                         continue;
                     }
 
-                    var format = SubtitleFormat.Normalize(item.Ext, downloadUri);
-                    if (format == null)
+                    ordered.Add(new RemoteSubtitleInfo
                     {
-                        continue;
-                    }
+                        Id = _tokenStore.Create(new DownloadRequest(
+                            ProviderKey,
+                            candidate.DownloadUri,
+                            candidate.Language,
+                            candidate.Format)),
+                        Name = SearchResultMatcher.FormatDisplayName(name, candidate.Match.Kind),
+                        ProviderName = Name,
+                        Language = candidate.Language,
+                        Format = candidate.Format,
+                        IsHashMatch = candidate.Match.Kind == SearchMatchKind.Cid
+                    });
 
-                    try
+                    if (ordered.Count >= ResultLimit)
                     {
-                        UrlSafetyValidator.ValidateSyntax(downloadUri, DownloadPolicy);
+                        break;
                     }
-                    catch (SecurityException)
-                    {
-                        continue;
-                    }
-
-                    var isHashMatch = !string.IsNullOrWhiteSpace(localCid) &&
-                                      !string.IsNullOrWhiteSpace(item.Cid) &&
-                                      string.Equals(localCid, item.Cid, StringComparison.OrdinalIgnoreCase);
-                    var rank = (long)item.Score + (isHashMatch ? 1000L : 0L) + (searchedByCode ? 100L : 0L);
-                    var resultLanguage = LanguageNormalizer.ResolveReportedLanguage(requestedLanguage, item.Languages);
-                    var id = _tokenStore.Create(new DownloadRequest(
-                        ProviderKey,
-                        downloadUri,
-                        resultLanguage,
-                        format));
-
-                    results.Add(Tuple.Create(
-                        new RemoteSubtitleInfo
-                        {
-                            Id = id,
-                            Name = isHashMatch ? "[⚡完美匹配] " + item.Name : item.Name,
-                            ProviderName = Name,
-                            Language = resultLanguage,
-                            Format = format,
-                            IsHashMatch = isHashMatch
-                        },
-                        rank));
                 }
 
-                var ordered = results
-                    .OrderByDescending(result => result.Item1.IsHashMatch)
-                    .ThenByDescending(result => result.Item2)
-                    .Select(result => result.Item1)
-                    .ToArray();
-                _logger.Info($"[Thunder] Search completed with {ordered.Length} result(s).");
+                _logger.Info($"[Thunder] Search completed with {ordered.Count} result(s).");
                 return ordered;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -235,6 +190,167 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 _logger.Error($"[Thunder] Download failed: {ex.GetType().Name}.");
                 return new SubtitleResponse();
             }
+        }
+
+        private async Task<IReadOnlyList<RankedCandidate>> SearchQueryAsync(
+            string query,
+            string originalTitle,
+            string? extractedCode,
+            string? localCid,
+            string requestedLanguage,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] responseBytes;
+            var fetchedFromUpstream = false;
+            if (!SearchCache.TryGet(query, out responseBytes!))
+            {
+                var builder = new UriBuilder(ApiEndpoint)
+                {
+                    Query = "name=" + Uri.EscapeDataString(query)
+                };
+
+                responseBytes = await SafeHttpClient.GetBytesAsync(
+                        builder.Uri,
+                        ApiPolicy,
+                        SearchResponseLimit,
+                        TimeSpan.FromSeconds(20),
+                        2,
+                        PluginMetadata.UserAgent,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                fetchedFromUpstream = true;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            ThunderSubtitleResponse payload;
+            using (var stream = new MemoryStream(responseBytes, false))
+            {
+                payload = _jsonSerializer.DeserializeFromStream<ThunderSubtitleResponse>(stream);
+            }
+
+            if (payload == null || payload.Code != 0 || payload.Data == null)
+            {
+                _logger.Warn("[Thunder] Upstream response was unsuccessful or missing data.");
+                return Array.Empty<RankedCandidate>();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (fetchedFromUpstream && responseBytes.Length <= MaximumCachedSearchBytes)
+            {
+                SearchCache.Set(query, responseBytes);
+            }
+
+            var results = new List<RankedCandidate>();
+            foreach (var item in payload.Data.Take(100))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(item.Name) ||
+                    string.IsNullOrWhiteSpace(item.Url) ||
+                    !Uri.TryCreate(item.Url, UriKind.Absolute, out var downloadUri))
+                {
+                    continue;
+                }
+
+                var format = SubtitleFormat.Normalize(item.Ext, downloadUri);
+                if (format == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    UrlSafetyValidator.ValidateSyntax(downloadUri, DownloadPolicy);
+                }
+                catch (SecurityException)
+                {
+                    continue;
+                }
+
+                var cidMatch = !string.IsNullOrWhiteSpace(localCid) &&
+                               !string.IsNullOrWhiteSpace(item.Cid) &&
+                               string.Equals(localCid, item.Cid, StringComparison.OrdinalIgnoreCase);
+                var match = SearchResultMatcher.Evaluate(originalTitle, item.Name, extractedCode, cidMatch);
+                var language = LanguageNormalizer.ResolveReportedLanguage(requestedLanguage, item.Languages);
+                results.Add(new RankedCandidate(
+                    item,
+                    downloadUri,
+                    format,
+                    language,
+                    match,
+                    Math.Max(0, Math.Min(item.Score, 10000)),
+                    LanguageNormalizer.ReportsRequestedLanguage(requestedLanguage, item.Languages)));
+            }
+
+            return results;
+        }
+
+        private async Task<string?> GetLocalCidAsync(string? mediaPath, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
+            {
+                return null;
+            }
+
+            var semaphoreEntered = false;
+            try
+            {
+                await CidConcurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
+                semaphoreEntered = true;
+                return await ThunderCidCalculator.CalculateAsync(mediaPath!, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"[Thunder] CID calculation failed: {ex.GetType().Name}.");
+                return null;
+            }
+            finally
+            {
+                if (semaphoreEntered)
+                {
+                    CidConcurrency.Release();
+                }
+            }
+        }
+
+        private sealed class RankedCandidate
+        {
+            public RankedCandidate(
+                ThunderSubtitleItem item,
+                Uri downloadUri,
+                string format,
+                string language,
+                SearchMatch match,
+                int upstreamScore,
+                bool matchesRequestedLanguage)
+            {
+                Item = item;
+                DownloadUri = downloadUri;
+                Format = format;
+                Language = language;
+                Match = match;
+                UpstreamScore = upstreamScore;
+                MatchesRequestedLanguage = matchesRequestedLanguage;
+            }
+
+            public ThunderSubtitleItem Item { get; }
+
+            public Uri DownloadUri { get; }
+
+            public string Format { get; }
+
+            public string Language { get; }
+
+            public SearchMatch Match { get; }
+
+            public int UpstreamScore { get; }
+
+            public bool MatchesRequestedLanguage { get; }
         }
     }
 }

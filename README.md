@@ -14,7 +14,12 @@ It supports multilingual search, title matching, language normalization, file-ID
 
 - Search multilingual subtitles through SubtitleCat and rank results by title similarity.
 - Search Thunder and improve matching with local-file CID data.
-- Use release or catalog identifiers found in filenames as additional search hints.
+- Classify high-confidence results with compact `[CID]`, `[ID]`, and `[TITLE]` labels.
+- Remove exact duplicate results within each provider before they reach Emby.
+- Prioritize Thunder results that explicitly match the requested language.
+- Fall back from release/catalog identifiers to the original title when needed.
+- Cache repeated searches briefly in memory without persisting media queries.
+- Use release or catalog identifiers from media filenames even when Emby supplies a display title.
 - Normalize common Chinese, English, Japanese, Korean, and other language metadata.
 - Support `srt`, `ass`, `ssa`, and `vtt` subtitle formats.
 - Enable SubtitleCat and Thunder independently.

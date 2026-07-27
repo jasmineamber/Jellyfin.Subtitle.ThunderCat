@@ -8,6 +8,8 @@ public sealed class MediaCodeExtractorTests
     [InlineData("FC2-PPV-1234567 title", "FC2-PPV-1234567")]
     [InlineData("fc2_ppv_1234567", "FC2-PPV-1234567")]
     [InlineData("LULU-421 1080p", "LULU-421")]
+    [InlineData("abc_123 subtitle", "ABC-123")]
+    [InlineData("ABC12345", "ABC12345")]
     [InlineData("390JAC-177", "390JAC-177")]
     public void Extract_ReturnsKnownMediaCodes(string title, string expected)
     {

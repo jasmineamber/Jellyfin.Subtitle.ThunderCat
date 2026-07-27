@@ -39,6 +39,15 @@ namespace Emby.Subtitle.ThunderCat.Utils
         public static double GetJaccardSimilarity(string source, string target) =>
             GetTitleSimilarity(source, target);
 
+        internal static bool AreEquivalentTitles(string? source, string? target)
+        {
+            var normalizedSource = NormalizeForComparison(source);
+            return normalizedSource.Length > 0 &&
+                   string.Equals(normalizedSource, NormalizeForComparison(target), StringComparison.Ordinal);
+        }
+
+        internal static string NormalizeForComparison(string? value) => Normalize(value ?? string.Empty);
+
         private static string Normalize(string value)
         {
             if (string.IsNullOrWhiteSpace(value))

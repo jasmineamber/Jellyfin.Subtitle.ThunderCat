@@ -29,8 +29,8 @@ public sealed class ProviderHealthCheckerTests
     [Fact]
     public void PluginMetadata_DerivesVersionAndUserAgentFromAssembly()
     {
-        Assert.Equal("1.3.4", PluginMetadata.Version);
-        Assert.Contains("ThunderCat/1.3.4", PluginMetadata.UserAgent, StringComparison.Ordinal);
+        Assert.Equal("1.4.0", PluginMetadata.Version);
+        Assert.Contains("ThunderCat/1.4.0", PluginMetadata.UserAgent, StringComparison.Ordinal);
         Assert.Equal("Emby Server 4.8.11.0", PluginMetadata.CompatibilityBaseline);
     }
 

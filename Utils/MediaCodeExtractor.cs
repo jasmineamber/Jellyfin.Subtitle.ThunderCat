@@ -10,8 +10,8 @@ namespace Emby.Subtitle.ThunderCat.Utils
             @"\bFC2[\s._-]*PPV[\s._-]*(?<number>\d{5,8})\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             RegexTimeout);
-        private static readonly Regex DashedPattern = new Regex(
-            @"\b(?<prefix>\d*[A-Z]{2,10})-(?<number>\d{2,7})\b",
+        private static readonly Regex SeparatedPattern = new Regex(
+            @"\b(?<prefix>\d*[A-Z]{2,10})[-_]+(?<number>\d{2,7})\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             RegexTimeout);
         private static readonly Regex CompactPattern = new Regex(
@@ -32,10 +32,10 @@ namespace Emby.Subtitle.ThunderCat.Utils
                 return "FC2-PPV-" + fc2.Groups["number"].Value;
             }
 
-            var dashed = DashedPattern.Match(title);
-            if (dashed.Success && !IsGenericEpisodePrefix(dashed.Groups["prefix"].Value))
+            var separated = SeparatedPattern.Match(title);
+            if (separated.Success && !IsGenericEpisodePrefix(separated.Groups["prefix"].Value))
             {
-                return (dashed.Groups["prefix"].Value + "-" + dashed.Groups["number"].Value)
+                return (separated.Groups["prefix"].Value + "-" + separated.Groups["number"].Value)
                     .ToUpperInvariant();
             }
 
@@ -47,6 +47,22 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
             return null;
         }
+
+        internal static bool AreEquivalent(string? first, string? second)
+        {
+            if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(second))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                RemoveSeparators(first!),
+                RemoveSeparators(second!),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string RemoveSeparators(string value) =>
+            value.Replace("-", string.Empty).Replace("_", string.Empty);
 
         private static bool IsGenericEpisodePrefix(string prefix) =>
             prefix.Equals("EP", StringComparison.OrdinalIgnoreCase) ||
