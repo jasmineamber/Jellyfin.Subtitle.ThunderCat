@@ -30,7 +30,7 @@ It supports multilingual search, title matching, language normalization, file-ID
 - Short-lived opaque download tokens avoid exposing upstream URLs in subtitle IDs.
 - Requests are restricted to HTTPS, explicit host allowlists, port 443, and public IP addresses.
 - Redirect targets are revalidated on every hop to reduce SSRF risk.
-- Network requests use total timeouts, bounded retries, and response-size limits.
+- Network requests use per-attempt timeouts, bounded retries, provider-level search budgets, and response-size limits.
 - Downloaded content is checked to reject HTML/JSON error pages and disguised archives.
 - Diagnostics exclude media paths, search queries, and download URLs.
 

@@ -23,6 +23,9 @@ namespace Emby.Subtitle.ThunderCat.Providers
         private const int SubtitleResponseLimit = 8 * 1024 * 1024;
         private const int ResultLimit = 20;
         private const int MaximumCachedSearchBytes = 512 * 1024;
+        private static readonly TimeSpan SearchAttemptTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan SearchBudget = TimeSpan.FromSeconds(12);
+        private static readonly TimeSpan CidBudget = TimeSpan.FromSeconds(2);
         private static readonly Uri ApiEndpoint = new Uri("https://api-shoulei-ssl.xunlei.com/oracle/subtitle");
         private static readonly UrlPolicy ApiPolicy = new UrlPolicy("api-shoulei-ssl.xunlei.com");
         private static readonly UrlPolicy DownloadPolicy = new UrlPolicy("subtitle.v.geilijiasu.com");
@@ -34,12 +37,22 @@ namespace Emby.Subtitle.ThunderCat.Providers
 
         private readonly ILogger _logger;
         private readonly IJsonSerializer _jsonSerializer;
+        private readonly Func<string, CancellationToken, Task<string>> _calculateCidAsync;
         private readonly DownloadTokenStore _tokenStore = DownloadTokenStore.Shared;
 
         public ThunderProvider(ILogger logger, IJsonSerializer jsonSerializer)
+            : this(logger, jsonSerializer, ThunderCidCalculator.CalculateAsync)
+        {
+        }
+
+        internal ThunderProvider(
+            ILogger logger,
+            IJsonSerializer jsonSerializer,
+            Func<string, CancellationToken, Task<string>> calculateCidAsync)
         {
             _logger = logger;
             _jsonSerializer = jsonSerializer;
+            _calculateCidAsync = calculateCidAsync;
         }
 
         public string Name => ProviderKey;
@@ -65,30 +78,54 @@ namespace Emby.Subtitle.ThunderCat.Providers
             }
 
             var requestedLanguage = LanguageNormalizer.NormalizeForEmby(request.Language);
-            var localCid = await GetLocalCidAsync(request.MediaPath, cancellationToken).ConfigureAwait(false);
 
             try
             {
                 var candidates = new List<RankedCandidate>();
-                for (var index = 0; index < queryPlan.Queries.Count; index++)
+                using (var searchSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var queryCandidates = await SearchQueryAsync(
-                            queryPlan.Queries[index],
-                            queryPlan.RankingTitle,
-                            queryPlan.MediaCode,
-                            localCid,
-                            requestedLanguage,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    candidates.AddRange(queryCandidates);
-
-                    if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
-                            queryPlan.Queries[index],
-                            queryPlan.MediaCode,
-                            candidate.Match)))
+                    searchSource.CancelAfter(SearchBudget);
+                    try
                     {
-                        break;
+                        var localCid = await GetLocalCidAsync(
+                                request.MediaPath,
+                                CidBudget,
+                                searchSource.Token)
+                            .ConfigureAwait(false);
+
+                        for (var index = 0; index < queryPlan.Queries.Count; index++)
+                        {
+                            searchSource.Token.ThrowIfCancellationRequested();
+                            var queryCandidates = await SearchQueryAsync(
+                                    queryPlan.Queries[index],
+                                    queryPlan.RankingTitle,
+                                    queryPlan.MediaCode,
+                                    localCid,
+                                    requestedLanguage,
+                                    searchSource.Token)
+                                .ConfigureAwait(false);
+                            candidates.AddRange(queryCandidates);
+
+                            if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
+                                    queryPlan.Queries[index],
+                                    queryPlan.MediaCode,
+                                    candidate.Match)))
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (OperationCanceledException) when (searchSource.IsCancellationRequested)
+                    {
+                        _logger.Warn("[Thunder] Search budget exhausted; returning collected results.");
+                    }
+                    catch (TimeoutException)
+                    {
+                        _logger.Warn("[Thunder] Upstream search attempts timed out; returning collected results.");
                     }
                 }
 
@@ -134,11 +171,6 @@ namespace Emby.Subtitle.ThunderCat.Providers
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
-            }
-            catch (TimeoutException)
-            {
-                _logger.Warn("[Thunder] Search timed out.");
-                return Array.Empty<RemoteSubtitleInfo>();
             }
             catch (Exception ex)
             {
@@ -214,7 +246,7 @@ namespace Emby.Subtitle.ThunderCat.Providers
                         builder.Uri,
                         ApiPolicy,
                         SearchResponseLimit,
-                        TimeSpan.FromSeconds(20),
+                        SearchAttemptTimeout,
                         2,
                         PluginMetadata.UserAgent,
                         cancellationToken)
@@ -285,7 +317,10 @@ namespace Emby.Subtitle.ThunderCat.Providers
             return results;
         }
 
-        private async Task<string?> GetLocalCidAsync(string? mediaPath, CancellationToken cancellationToken)
+        internal async Task<string?> GetLocalCidAsync(
+            string? mediaPath,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(mediaPath) || !File.Exists(mediaPath))
             {
@@ -293,27 +328,35 @@ namespace Emby.Subtitle.ThunderCat.Providers
             }
 
             var semaphoreEntered = false;
-            try
+            using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                await CidConcurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
-                semaphoreEntered = true;
-                return await ThunderCidCalculator.CalculateAsync(mediaPath!, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn($"[Thunder] CID calculation failed: {ex.GetType().Name}.");
-                return null;
-            }
-            finally
-            {
-                if (semaphoreEntered)
+                timeoutSource.CancelAfter(timeout);
+                try
                 {
-                    CidConcurrency.Release();
+                    await CidConcurrency.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+                    semaphoreEntered = true;
+                    return await _calculateCidAsync(mediaPath!, timeoutSource.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Warn("[Thunder] CID calculation timed out; continuing without CID.");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"[Thunder] CID calculation failed: {ex.GetType().Name}.");
+                    return null;
+                }
+                finally
+                {
+                    if (semaphoreEntered)
+                    {
+                        CidConcurrency.Release();
+                    }
                 }
             }
         }

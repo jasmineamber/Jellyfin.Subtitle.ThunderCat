@@ -22,6 +22,8 @@ namespace Emby.Subtitle.ThunderCat.Providers
         private const int SubtitleResponseLimit = 8 * 1024 * 1024;
         private const int ResultLimit = 10;
         private const int MaximumCachedSearchCharacters = 256 * 1024;
+        private static readonly TimeSpan SearchAttemptTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan SearchBudget = TimeSpan.FromSeconds(12);
         private static readonly Uri Domain = new Uri("https://subtitlecat.com/");
         private static readonly UrlPolicy SubtitleCatPolicy = new UrlPolicy("subtitlecat.com", "www.subtitlecat.com");
         private static readonly ExpiringCache<string> SearchCache = new ExpiringCache<string>(
@@ -64,23 +66,42 @@ namespace Emby.Subtitle.ThunderCat.Providers
             try
             {
                 var candidates = new List<RankedCandidate>();
-                for (var index = 0; index < queryPlan.Queries.Count; index++)
+                using (var searchSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var queryCandidates = await SearchQueryAsync(
-                            queryPlan.Queries[index],
-                            queryPlan.RankingTitle,
-                            queryPlan.MediaCode,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    candidates.AddRange(queryCandidates);
-
-                    if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
-                            queryPlan.Queries[index],
-                            queryPlan.MediaCode,
-                            candidate.Match)))
+                    searchSource.CancelAfter(SearchBudget);
+                    try
                     {
-                        break;
+                        for (var index = 0; index < queryPlan.Queries.Count; index++)
+                        {
+                            searchSource.Token.ThrowIfCancellationRequested();
+                            var queryCandidates = await SearchQueryAsync(
+                                    queryPlan.Queries[index],
+                                    queryPlan.RankingTitle,
+                                    queryPlan.MediaCode,
+                                    searchSource.Token)
+                                .ConfigureAwait(false);
+                            candidates.AddRange(queryCandidates);
+
+                            if (queryCandidates.Any(candidate => SearchResultMatcher.IsSufficientForQuery(
+                                    queryPlan.Queries[index],
+                                    queryPlan.MediaCode,
+                                    candidate.Match)))
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (OperationCanceledException) when (searchSource.IsCancellationRequested)
+                    {
+                        _logger.Warn("[SubtitleCat] Search budget exhausted; returning collected results.");
+                    }
+                    catch (TimeoutException)
+                    {
+                        _logger.Warn("[SubtitleCat] Upstream search attempts timed out; returning collected results.");
                     }
                 }
 
@@ -122,11 +143,6 @@ namespace Emby.Subtitle.ThunderCat.Providers
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
-            }
-            catch (TimeoutException)
-            {
-                _logger.Warn("[SubtitleCat] Search timed out.");
-                return Array.Empty<RemoteSubtitleInfo>();
             }
             catch (Exception ex)
             {
@@ -218,7 +234,7 @@ namespace Emby.Subtitle.ThunderCat.Providers
                         searchUri,
                         SubtitleCatPolicy,
                         SearchResponseLimit,
-                        TimeSpan.FromSeconds(20),
+                        SearchAttemptTimeout,
                         2,
                         PluginMetadata.UserAgent,
                         cancellationToken)

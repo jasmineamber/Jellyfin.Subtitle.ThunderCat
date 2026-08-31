@@ -49,22 +49,47 @@ namespace Emby.Subtitle.ThunderCat.Infrastructure
                 throw new ArgumentOutOfRangeException(nameof(maxAttempts));
             }
 
-            using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-            {
-                timeoutSource.CancelAfter(timeout);
-                Exception? lastError = null;
+            return await ExecuteWithRetryAsync(
+                    token => SendWithRedirectsAsync(uri, policy, maxBytes, userAgent, token),
+                    timeout,
+                    maxAttempts,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
-                for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        internal static async Task<T> ExecuteWithRetryAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            TimeSpan timeout,
+            int maxAttempts,
+            CancellationToken cancellationToken)
+        {
+            if (operation == null)
+            {
+                throw new ArgumentNullException(nameof(operation));
+            }
+
+            if (timeout <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            }
+
+            if (maxAttempts <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxAttempts));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            Exception? lastError = null;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using (var attemptTimeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
+                    attemptTimeoutSource.CancelAfter(timeout);
                     try
                     {
-                        return await SendWithRedirectsAsync(
-                                uri,
-                                policy,
-                                maxBytes,
-                                userAgent,
-                                timeoutSource.Token)
-                            .ConfigureAwait(false);
+                        return await operation(attemptTimeoutSource.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -72,34 +97,29 @@ namespace Emby.Subtitle.ThunderCat.Infrastructure
                     }
                     catch (OperationCanceledException ex)
                     {
-                        throw new TimeoutException("The upstream request exceeded its total timeout.", ex);
+                        lastError = new TimeoutException(
+                            $"The upstream request timed out on attempt {attempt} of {maxAttempts}.",
+                            ex);
                     }
-                    catch (Exception ex) when (IsTransient(ex) && attempt < maxAttempts)
+                    catch (Exception ex) when (IsTransient(ex))
                     {
                         lastError = ex;
-                        var delay = TimeSpan.FromMilliseconds((250 * (1 << (attempt - 1))) + GetJitterMilliseconds());
-                        try
-                        {
-                            await Task.Delay(delay, timeoutSource.Token).ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                        {
-                            throw;
-                        }
-                        catch (OperationCanceledException timeoutException)
-                        {
-                            throw new TimeoutException("The upstream request exceeded its total timeout.", timeoutException);
-                        }
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        lastError = ex;
-                        break;
+                        throw;
                     }
                 }
 
-                throw lastError ?? new HttpRequestException("The upstream request failed.");
+                if (attempt < maxAttempts)
+                {
+                    var delay = TimeSpan.FromMilliseconds(
+                        (250 * (1 << (attempt - 1))) + GetJitterMilliseconds());
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
             }
+
+            throw lastError ?? new HttpRequestException("The upstream request failed.");
         }
 
         private static async Task<byte[]> SendWithRedirectsAsync(

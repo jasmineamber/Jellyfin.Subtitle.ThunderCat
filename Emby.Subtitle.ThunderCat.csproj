@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>10.0</LangVersion>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <AssemblyName>Emby.Subtitle.ThunderCat</AssemblyName>
     <RootNamespace>Emby.Subtitle.ThunderCat</RootNamespace>
     <Authors>drunkleee</Authors>
