@@ -4,7 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal sealed class SubtitleCatSearchItem
     {
@@ -21,13 +21,16 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
     internal sealed class SubtitleCatDownloadLink
     {
-        public SubtitleCatDownloadLink(Uri uri, string language)
+        public SubtitleCatDownloadLink(Uri uri, string variant, string language)
         {
             Uri = uri;
+            Variant = variant;
             Language = language;
         }
 
         public Uri Uri { get; }
+
+        public string Variant { get; }
 
         public string Language { get; }
     }
@@ -92,12 +95,79 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
         public static SubtitleCatDownloadLink? FindDownloadLink(string html, Uri baseUri, string requestedLanguage)
         {
+            var links = FindDownloadLinks(html, baseUri, requestedLanguage);
+            return links.Count == 0 ? null : links[0];
+        }
+
+        public static IReadOnlyList<SubtitleCatDownloadLink> FindDownloadLinks(
+            string html,
+            Uri baseUri,
+            string requestedLanguage)
+        {
             if (string.IsNullOrEmpty(html))
+            {
+                return Array.Empty<SubtitleCatDownloadLink>();
+            }
+
+            var candidates = ParseDownloadCandidates(html);
+            var languageCandidates = LanguageNormalizer.GetSubtitleCatCandidates(requestedLanguage);
+            var links = new List<SubtitleCatDownloadLink>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var language in languageCandidates)
+            {
+                foreach (var candidate in candidates)
+                {
+                    if (!language.Equals(candidate.Variant, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (!Uri.TryCreate(baseUri, WebUtility.HtmlDecode(candidate.Href), out var uri) ||
+                        !seen.Add(uri.AbsoluteUri))
+                    {
+                        continue;
+                    }
+
+                    links.Add(new SubtitleCatDownloadLink(
+                        uri,
+                        candidate.Variant,
+                        LanguageNormalizer.NormalizeForJellyfin(candidate.Variant)));
+                }
+            }
+
+            return links;
+        }
+
+        public static SubtitleCatDownloadLink? FindDownloadLinkForVariant(
+            string html,
+            Uri baseUri,
+            string variant)
+        {
+            if (string.IsNullOrEmpty(html) || string.IsNullOrWhiteSpace(variant))
             {
                 return null;
             }
 
-            var candidates = new List<Tuple<string, string>>();
+            foreach (var candidate in ParseDownloadCandidates(html))
+            {
+                if (!variant.Equals(candidate.Variant, StringComparison.OrdinalIgnoreCase) ||
+                    !Uri.TryCreate(baseUri, WebUtility.HtmlDecode(candidate.Href), out var uri))
+                {
+                    continue;
+                }
+
+                return new SubtitleCatDownloadLink(
+                    uri,
+                    candidate.Variant,
+                    LanguageNormalizer.NormalizeForJellyfin(candidate.Variant));
+            }
+
+            return null;
+        }
+
+        private static List<RawDownloadCandidate> ParseDownloadCandidates(string html)
+        {
+            var candidates = new List<RawDownloadCandidate>();
             foreach (Match anchor in AnchorRegex.Matches(html))
             {
                 var attributes = ParseAttributes(anchor.Groups["attrs"].Value);
@@ -110,25 +180,10 @@ namespace Emby.Subtitle.ThunderCat.Utils
                     continue;
                 }
 
-                candidates.Add(Tuple.Create(id.Substring("download_".Length), href));
+                candidates.Add(new RawDownloadCandidate(id.Substring("download_".Length), href));
             }
 
-            var languageCandidates = LanguageNormalizer.GetSubtitleCatCandidates(requestedLanguage);
-            var selected = candidates.FirstOrDefault(candidate =>
-                languageCandidates.Any(language => language.Equals(candidate.Item1, StringComparison.OrdinalIgnoreCase)));
-
-            if (selected == null)
-            {
-                return null;
-            }
-
-            Uri uri;
-            if (!Uri.TryCreate(baseUri, WebUtility.HtmlDecode(selected.Item2), out uri!))
-            {
-                return null;
-            }
-
-            return new SubtitleCatDownloadLink(uri, LanguageNormalizer.NormalizeForEmby(selected.Item1));
+            return candidates;
         }
 
         private static Dictionary<string, string> ParseAttributes(string attributes)
@@ -143,6 +198,19 @@ namespace Emby.Subtitle.ThunderCat.Utils
             }
 
             return result;
+        }
+
+        private sealed class RawDownloadCandidate
+        {
+            public RawDownloadCandidate(string variant, string href)
+            {
+                Variant = variant;
+                Href = href;
+            }
+
+            public string Variant { get; }
+
+            public string Href { get; }
         }
     }
 }

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal static class SubtitleFormat
     {

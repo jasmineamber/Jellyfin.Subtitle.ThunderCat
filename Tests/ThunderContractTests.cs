@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Emby.Subtitle.ThunderCat.Models;
+using Jellyfin.Plugin.ThunderCat.Models;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class ThunderContractTests
 {

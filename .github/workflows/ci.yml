@@ -11,15 +11,8 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Emby SDK ${{ matrix.emby_sdk }}
+    name: Jellyfin SDK 10.10.7
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        emby_sdk:
-          - 4.8.11
-          - 4.9.1.90
-          - 4.10.0.1-beta
 
     steps:
       - name: Checkout
@@ -28,14 +21,14 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 8.0.x
           cache: true
           cache-dependency-path: |
             **/*.csproj
             nuget.config
 
       - name: Restore
-        run: dotnet restore Emby.Subtitle.ThunderCat.sln -p:EmbySdkVersion=${{ matrix.emby_sdk }}
+        run: dotnet restore Jellyfin.Plugin.ThunderCat.sln -p:JellyfinVersion=10.10.7
 
       - name: Build and test
-        run: dotnet test Emby.Subtitle.ThunderCat.sln --configuration Release --no-restore -p:EmbySdkVersion=${{ matrix.emby_sdk }} --warnaserror
+        run: dotnet test Jellyfin.Plugin.ThunderCat.sln --configuration Release --no-restore -p:JellyfinVersion=10.10.7 --warnaserror

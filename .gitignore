@@ -3,6 +3,8 @@ bin/
 obj/
 artifacts/
 TestResults/
+__pycache__/
+*.pyc
 
 # IDE
 .vs/
@@ -17,3 +19,4 @@ Thumbs.db
 
 # Sensitive
 *.expect
+/mitm_mcp_traffic.db

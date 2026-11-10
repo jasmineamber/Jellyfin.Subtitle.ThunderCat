@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Emby.Subtitle.ThunderCat.Infrastructure
+namespace Jellyfin.Plugin.ThunderCat.Infrastructure
 {
     internal sealed class ExpiringCache<T>
     {

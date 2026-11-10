@@ -1,4 +1,4 @@
-define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
+export default function (view) {
     'use strict';
 
     var pluginId = '9b7dca24-edf8-4155-bbd6-8c2b0f07448d';
@@ -139,13 +139,13 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
                 if (readyAttempts++ < 40) {
                     window.setTimeout(loadConfiguration, 100);
                 } else {
-                    setSaveStatus('error', 'Emby API 未就绪，请刷新页面');
+                    setSaveStatus('error', 'Jellyfin API 未就绪，请刷新页面');
                 }
                 return;
             }
 
             readyAttempts = 0;
-            loading.show();
+            Dashboard.showLoadingMsg();
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                 subtitleCatCheckbox.checked = readValue(
                     config,
@@ -162,12 +162,12 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
                 refreshDirtyState();
                 return loadRuntimeInfo();
             }).then(function () {
-                loading.hide();
+                Dashboard.hideLoadingMsg();
             }).catch(function (error) {
                 console.error('[ThunderCat] Failed to load plugin configuration.', error);
                 setProviderButtonsDisabled(false);
-                setSaveStatus('error', '配置读取失败，请查看 Emby 日志');
-                loading.hide();
+                setSaveStatus('error', '配置读取失败，请查看 Jellyfin 日志');
+                Dashboard.hideLoadingMsg();
             });
         }
 
@@ -210,7 +210,7 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
             return [
                 'ThunderCat diagnostics',
                 'Plugin: ' + runtimeInfo.PluginVersion,
-                'Emby Server: ' + runtimeInfo.ServerVersion,
+                'Jellyfin Server: ' + runtimeInfo.ServerVersion,
                 'Compatibility baseline: ' + runtimeInfo.CompatibilityBaseline,
                 'SubtitleCat: ' + (subtitleCatCheckbox.checked ? 'enabled' : 'disabled') +
                     ' / ' + providerHealth.SubtitleCat,
@@ -272,7 +272,7 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
             event.preventDefault();
             saveButton.disabled = true;
             setSaveStatus('testing', '正在保存…');
-            loading.show();
+            Dashboard.showLoadingMsg();
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                 config.EnableSubtitleCat = subtitleCatCheckbox.checked;
                 config.EnableThunder = thunderCheckbox.checked;
@@ -280,7 +280,7 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
             }).then(function (result) {
                 savedState = currentState();
                 refreshDirtyState();
-                loading.hide();
+                Dashboard.hideLoadingMsg();
                 if (typeof Dashboard !== 'undefined' &&
                     typeof Dashboard.processPluginConfigurationUpdateResult === 'function') {
                     Dashboard.processPluginConfigurationUpdateResult(result);
@@ -288,8 +288,8 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
             }).catch(function (error) {
                 console.error('[ThunderCat] Failed to save plugin configuration.', error);
                 saveButton.disabled = false;
-                setSaveStatus('error', '保存失败，请查看 Emby 日志');
-                loading.hide();
+                setSaveStatus('error', '保存失败，请查看 Jellyfin 日志');
+                Dashboard.hideLoadingMsg();
             });
             return false;
         });
@@ -297,7 +297,5 @@ define(['loading', 'emby-button', 'emby-checkbox'], function (loading) {
         page.addEventListener('viewshow', loadConfiguration);
     }
 
-    return function (view) {
-        initializePage(view);
-    };
-});
+    initializePage(view);
+}

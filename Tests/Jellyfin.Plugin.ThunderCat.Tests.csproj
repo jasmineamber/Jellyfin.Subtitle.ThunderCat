@@ -1,25 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <AssemblyName>Emby.Subtitle.ThunderCat.Tests</AssemblyName>
-    <EmbySdkVersion Condition="'$(EmbySdkVersion)' == ''">4.8.11</EmbySdkVersion>
+    <AssemblyName>Jellyfin.Plugin.ThunderCat.Tests</AssemblyName>
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">10.10.7</JellyfinVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="MediaBrowser.Server.Core" Version="$(EmbySdkVersion)" PrivateAssets="all" />
+    <PackageReference Include="Jellyfin.Common" Version="$(JellyfinVersion)" PrivateAssets="all" />
+    <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinVersion)" PrivateAssets="all" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Emby.Subtitle.ThunderCat.csproj" />
+    <ProjectReference Include="..\Jellyfin.Plugin.ThunderCat.csproj" />
   </ItemGroup>
 
   <ItemGroup>

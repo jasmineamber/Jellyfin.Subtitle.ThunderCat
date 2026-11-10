@@ -1,25 +1,20 @@
-# ThunderCat Subtitles for Emby
+# ThunderCat Subtitles for Jellyfin
 
 English | [中文](./README_CN.md)
 
-ThunderCat connects Emby to **SubtitleCat** and **Thunder (Xunlei)** for subtitle search and download.
-
-It supports multilingual search, title matching, language normalization, file-ID extraction, and CID matching against local files.
+ThunderCat is a subtitle plugin for **Jellyfin 10.10.7** that connects Jellyfin to **SubtitleCat** and **Thunder (Xunlei)**.
 
 > ThunderCat does not host media files or subtitles. Search results and subtitle files are supplied by third-party services.
-
-![ThunderCat configuration page](./docs/images/configuration-page.png)
 
 ## Features
 
 - Search multilingual subtitles through SubtitleCat and rank results by title similarity.
 - Search Thunder and improve matching with local-file CID data.
-- Classify high-confidence results with compact `[CID]`, `[ID]`, and `[TITLE]` labels.
-- Remove exact duplicate results within each provider before they reach Emby.
+- Label high-confidence results with compact `[CID]`, `[ID]`, and `[TITLE]` markers.
+- Remove exact duplicate results within each provider before they reach Jellyfin.
 - Prioritize Thunder results that explicitly match the requested language.
-- Fall back from release/catalog identifiers to the original title when needed.
-- Cache repeated searches briefly in memory without persisting media queries.
-- Use release or catalog identifiers from media filenames even when Emby supplies a display title.
+- Fall back from release or catalog identifiers to the original title.
+- Use release or catalog identifiers from media filenames even when Jellyfin supplies a display title.
 - Normalize common Chinese, English, Japanese, Korean, and other language metadata.
 - Support `srt`, `ass`, `ssa`, and `vtt` subtitle formats.
 - Enable SubtitleCat and Thunder independently.
@@ -30,89 +25,86 @@ It supports multilingual search, title matching, language normalization, file-ID
 - Short-lived opaque download tokens avoid exposing upstream URLs in subtitle IDs.
 - Requests are restricted to HTTPS, explicit host allowlists, port 443, and public IP addresses.
 - Redirect targets are revalidated on every hop to reduce SSRF risk.
-- Network requests use per-attempt timeouts, bounded retries, provider-level search budgets, and response-size limits.
+- Network requests use per-attempt timeouts, bounded retries, search budgets, and response-size limits.
 - Downloaded content is checked to reject HTML/JSON error pages and disguised archives.
 - Diagnostics exclude media paths, search queries, and download URLs.
 
 ## Compatibility
 
-| Item | Status |
+| Item | Value |
 |---|---|
-| Target framework | `netstandard2.0` |
-| Release SDK baseline | `MediaBrowser.Server.Core 4.8.11` |
-| Emby Server 4.8.11.0 | Plugin loading verified; SDK build and tests pass |
-| Emby 4.9.x | SDK build and tests pass; real-server validation is still recommended |
-| Emby 4.10 Beta | Beta SDK build/test check only; not a stable compatibility claim |
+| Target framework | `net8.0` |
+| Jellyfin SDK | `10.10.7` |
+| Plugin ABI | `10.10.7.0` |
+| Target server | Jellyfin Server `10.10.7` |
 
-Releases are built as a single DLL against the minimum supported SDK. Automated tests demonstrate source compatibility but do not replace real-server search, download, cancellation, and soak testing.
+This repository is Jellyfin-only. The Emby variant is no longer maintained on this branch.
 
 ## Installation
 
-1. Download the matching ZIP from Releases.
-2. Extract `Emby.Subtitle.ThunderCat.dll` into Emby's `plugins` directory.
-3. Restart Emby Server.
-4. Open **Plugins → ThunderCat Subtitles**, enable the providers you want, and save.
-5. Open **Library settings → Subtitle Downloads** and enable SubtitleCat and/or Thunder.
+### Install from the plugin repository
+
+1. Open **Dashboard → Plugins → Repositories**.
+2. Add this repository URL:
+
+   ```text
+   https://raw.githubusercontent.com/jasmineamber/Jellyfin.Subtitle.ThunderCat/dist/manifest.json
+   ```
+
+3. Open **Catalog**, select **ThunderCat Subtitles**, and install the latest version.
+4. Restart Jellyfin Server when prompted.
+5. Open **Dashboard → Plugins → ThunderCat Subtitles**, enable the providers, and save.
+6. Enable SubtitleCat and/or Thunder in the library's subtitle downloader settings.
+
+Use the raw manifest URL above. GitHub `blob` pages do not return the JSON document expected by Jellyfin.
+
+### Install from a ZIP
+
+1. Download the ZIP from [Releases](https://github.com/jasmineamber/Jellyfin.Subtitle.ThunderCat/releases).
+2. Put `Jellyfin.Plugin.ThunderCat.dll` in Jellyfin's `plugins/thundercat` directory.
+3. Restart Jellyfin Server.
+4. Complete steps 5 and 6 above.
 
 Common plugin directories:
 
-- Linux / Docker: `/var/lib/emby/plugins`
-- Windows: `%AppData%\Emby-Server\programdata\plugins`
+- Windows: `%LOCALAPPDATA%\jellyfin\plugins`
+- Linux: `/var/lib/jellyfin/plugins`
+- Docker: `/config/plugins`
 
 ## Configuration page
 
 The configuration page provides:
 
 - Global switches for SubtitleCat and Thunder.
-- Saved/unsaved state feedback.
+- Saved and unsaved state feedback.
 - Server-side connectivity tests for both providers.
-- Plugin version, Emby Server version, and compatibility baseline.
+- Plugin version, Jellyfin Server version, and compatibility baseline.
 - A diagnostic summary that excludes sensitive media information.
 
-Connectivity tests run on Emby Server and reuse the plugin's HTTPS, host-allowlist, and public-address validation. A successful test confirms that the upstream is currently reachable; it does not guarantee subtitles for a particular title.
-
-## FAQ
-
-### Does it support filenames with release or catalog identifiers?
-
-Yes. When a filename contains a letter-and-number identifier, ThunderCat can use it as an additional search hint.
-
-### Why must a provider be enabled in two places?
-
-The plugin page controls the global provider switch. Emby's library subtitle-download settings decide whether a particular library uses that provider. Both must be enabled for the provider to participate in searches.
-
-### Connectivity succeeds, but why are there no results?
-
-The connectivity test only confirms that the upstream can be reached. Results still depend on the title, identifier, requested language, upstream inventory, and upstream protocol compatibility.
+Connectivity tests run on Jellyfin Server and reuse the plugin's HTTPS, host-allowlist, and public-address validation. A successful test confirms that the upstream is currently reachable; it does not guarantee subtitles for a particular title.
 
 ## Build and test
 
-The full solution test suite uses .NET SDK 10:
-
-```bash
-dotnet restore Emby.Subtitle.ThunderCat.sln
-dotnet test Emby.Subtitle.ThunderCat.sln -c Release
-```
-
-Build the release DLL against the Emby 4.8.11 SDK baseline:
-
-```bash
-dotnet build Emby.Subtitle.ThunderCat.csproj \
-  -c Release \
-  -p:EmbySdkVersion=4.8.11
+```powershell
+dotnet restore Jellyfin.Plugin.ThunderCat.sln
+dotnet test Jellyfin.Plugin.ThunderCat.sln -c Release --warnaserror
+dotnet build Jellyfin.Plugin.ThunderCat.csproj -c Release -p:JellyfinVersion=10.10.7
 ```
 
 Output:
 
 ```text
-bin/Release/netstandard2.0/Emby.Subtitle.ThunderCat.dll
+bin/Release/net8.0/Jellyfin.Plugin.ThunderCat.dll
 ```
+
+Tagged releases are built by GitHub Actions. The workflow publishes the plugin ZIP,
+creates a GitHub Release, and updates the Jellyfin repository manifest on the `dist`
+branch.
 
 ## Known boundaries
 
 - SubtitleCat and Thunder are third-party upstreams whose contracts and availability may change.
 - Upstream domain migrations require a security review before allowlists are updated.
-- DNS validation reduces SSRF risk, but production deployments should still enforce host/container egress policies.
 - The project cannot guarantee subtitle availability and does not bypass upstream access restrictions.
 
 ## License

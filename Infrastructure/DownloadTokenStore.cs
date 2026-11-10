@@ -1,18 +1,44 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace Emby.Subtitle.ThunderCat.Infrastructure
+namespace Jellyfin.Plugin.ThunderCat.Infrastructure
 {
     internal sealed class DownloadRequest
     {
-        public DownloadRequest(string provider, Uri uri, string language, string format)
+        public DownloadRequest(
+            string provider,
+            Uri uri,
+            string language,
+            string format,
+            string? deduplicationKey = null,
+            IReadOnlyList<Uri>? candidateUris = null,
+            string? displayName = null,
+            string? mediaCode = null,
+            bool isAutomated = false)
         {
             Provider = provider;
             Uri = uri;
             Language = language;
             Format = format;
+            DeduplicationKey = deduplicationKey;
+            DisplayName = displayName;
+            MediaCode = mediaCode;
+            IsAutomated = isAutomated;
+
+            var candidates = new List<Uri>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in candidateUris ?? new[] { uri })
+            {
+                if (candidate != null && seen.Add(candidate.AbsoluteUri))
+                {
+                    candidates.Add(candidate);
+                }
+            }
+
+            CandidateUris = candidates;
         }
 
         public string Provider { get; }
@@ -22,6 +48,16 @@ namespace Emby.Subtitle.ThunderCat.Infrastructure
         public string Language { get; }
 
         public string Format { get; }
+
+        public string? DeduplicationKey { get; }
+
+        public IReadOnlyList<Uri> CandidateUris { get; }
+
+        public string? DisplayName { get; }
+
+        public string? MediaCode { get; }
+
+        public bool IsAutomated { get; }
     }
 
     internal sealed class DownloadTokenStore

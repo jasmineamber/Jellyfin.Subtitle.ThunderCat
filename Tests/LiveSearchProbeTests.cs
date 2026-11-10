@@ -1,12 +1,12 @@
 using System.Globalization;
 using System.Security;
 using System.Text.Json;
-using Emby.Subtitle.ThunderCat.Infrastructure;
-using Emby.Subtitle.ThunderCat.Models;
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Models;
+using Jellyfin.Plugin.ThunderCat.Utils;
 using Xunit.Abstractions;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class LiveSearchProbeTests
 {

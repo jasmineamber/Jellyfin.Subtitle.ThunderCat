@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Emby.Subtitle.ThunderCat.Infrastructure
+namespace Jellyfin.Plugin.ThunderCat.Infrastructure
 {
     internal sealed class ProviderProbeDefinition
     {

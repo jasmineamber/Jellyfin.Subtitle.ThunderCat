@@ -1,8 +1,7 @@
-using System.Text;
-using Emby.Subtitle.ThunderCat.Providers;
-using MediaBrowser.Model.Logging;
+using Jellyfin.Plugin.ThunderCat.Providers;
+using Microsoft.Extensions.Logging;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class ThunderProviderTimeoutTests
 {
@@ -13,7 +12,6 @@ public sealed class ThunderProviderTimeoutTests
         var logger = new TestLogger();
         var provider = new ThunderProvider(
             logger,
-            null!,
             async (_, token) =>
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -42,7 +40,6 @@ public sealed class ThunderProviderTimeoutTests
         var path = await WriteTempFileAsync();
         var provider = new ThunderProvider(
             new TestLogger(),
-            null!,
             async (_, token) =>
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -68,36 +65,23 @@ public sealed class ThunderProviderTimeoutTests
         return path;
     }
 
-    private sealed class TestLogger : ILogger
+    private sealed class TestLogger : ILogger<ThunderProvider>
     {
         public List<string> Messages { get; } = new List<string>();
 
-        public void Info(string message, params object[] paramList) => Messages.Add(message);
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
-        public void Info(ReadOnlyMemory<char> message) => Messages.Add(message.ToString());
+        public bool IsEnabled(LogLevel logLevel) => true;
 
-        public void Error(string message, params object[] paramList) => Messages.Add(message);
-
-        public void Error(ReadOnlyMemory<char> message) => Messages.Add(message.ToString());
-
-        public void Warn(string message, params object[] paramList) => Messages.Add(message);
-
-        public void Warn(ReadOnlyMemory<char> message) => Messages.Add(message.ToString());
-
-        public void Debug(string message, params object[] paramList) => Messages.Add(message);
-
-        public void Debug(ReadOnlyMemory<char> message) => Messages.Add(message.ToString());
-
-        public void Fatal(string message, params object[] paramList) => Messages.Add(message);
-
-        public void FatalException(string message, Exception exception, params object[] paramList) => Messages.Add(message);
-
-        public void ErrorException(string message, Exception exception, params object[] paramList) => Messages.Add(message);
-
-        public void LogMultiline(string message, LogSeverity severity, StringBuilder additionalContent) => Messages.Add(message);
-
-        public void Log(LogSeverity severity, string message, params object[] paramList) => Messages.Add(message);
-
-        public void Log(LogSeverity severity, ReadOnlyMemory<char> message) => Messages.Add(message.ToString());
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
     }
 }

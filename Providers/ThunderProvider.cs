@@ -3,18 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Emby.Subtitle.ThunderCat.Infrastructure;
-using Emby.Subtitle.ThunderCat.Models;
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Models;
+using Jellyfin.Plugin.ThunderCat.Utils;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
-using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
+using Microsoft.Extensions.Logging;
 
-namespace Emby.Subtitle.ThunderCat.Providers
+namespace Jellyfin.Plugin.ThunderCat.Providers
 {
     public sealed class ThunderProvider : ISubtitleProvider
     {
@@ -34,24 +34,25 @@ namespace Emby.Subtitle.ThunderCat.Providers
             TimeSpan.FromMinutes(5),
             16,
             StringComparer.OrdinalIgnoreCase);
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
 
-        private readonly ILogger _logger;
-        private readonly IJsonSerializer _jsonSerializer;
+        private readonly ILogger<ThunderProvider> _logger;
         private readonly Func<string, CancellationToken, Task<string>> _calculateCidAsync;
         private readonly DownloadTokenStore _tokenStore = DownloadTokenStore.Shared;
 
-        public ThunderProvider(ILogger logger, IJsonSerializer jsonSerializer)
-            : this(logger, jsonSerializer, ThunderCidCalculator.CalculateAsync)
+        public ThunderProvider(ILogger<ThunderProvider> logger)
+            : this(logger, ThunderCidCalculator.CalculateAsync)
         {
         }
 
         internal ThunderProvider(
-            ILogger logger,
-            IJsonSerializer jsonSerializer,
+            ILogger<ThunderProvider> logger,
             Func<string, CancellationToken, Task<string>> calculateCidAsync)
         {
             _logger = logger;
-            _jsonSerializer = jsonSerializer;
             _calculateCidAsync = calculateCidAsync;
         }
 
@@ -66,8 +67,19 @@ namespace Emby.Subtitle.ThunderCat.Providers
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!(Plugin.Instance?.Configuration.EnableThunder ?? true))
+            if (!(ThunderCatPlugin.Instance?.Configuration.EnableThunder ?? true))
             {
+                return Array.Empty<RemoteSubtitleInfo>();
+            }
+
+            var requestedLanguage = LanguageNormalizer.NormalizeForJellyfin(request.Language);
+            var deduplicationKey = AutomaticDownloadGuard.CreateKey(request.MediaPath, requestedLanguage);
+            if (request.IsAutomated && AutomaticDownloadGuard.ShouldSuppressSearch(deduplicationKey))
+            {
+                _logger.LogInformation(
+                    "[Thunder] Suppressing duplicate automated search: item={ItemName}, language={Language}.",
+                    LogValue.Sanitize(request.Name),
+                    requestedLanguage);
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
@@ -77,7 +89,16 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 return Array.Empty<RemoteSubtitleInfo>();
             }
 
-            var requestedLanguage = LanguageNormalizer.NormalizeForEmby(request.Language);
+            var queries = string.Join(
+                " | ",
+                queryPlan.Queries.Select(query => LogValue.Sanitize(query, 240)));
+            _logger.LogInformation(
+                "[Thunder] Search start: item={ItemName}, mediaCode={MediaCode}, language={Language}, automated={Automated}, queries={Queries}.",
+                LogValue.Sanitize(request.Name),
+                LogValue.Sanitize(queryPlan.MediaCode, 64),
+                requestedLanguage,
+                request.IsAutomated,
+                queries);
 
             try
             {
@@ -121,11 +142,11 @@ namespace Emby.Subtitle.ThunderCat.Providers
                     }
                     catch (OperationCanceledException) when (searchSource.IsCancellationRequested)
                     {
-                        _logger.Warn("[Thunder] Search budget exhausted; returning collected results.");
+                        _logger.LogWarning("[Thunder] Search budget exhausted; returning collected results.");
                     }
                     catch (TimeoutException)
                     {
-                        _logger.Warn("[Thunder] Upstream search attempts timed out; returning collected results.");
+                        _logger.LogWarning("[Thunder] Upstream search attempts timed out; returning collected results.");
                     }
                 }
 
@@ -151,10 +172,16 @@ namespace Emby.Subtitle.ThunderCat.Providers
                             ProviderKey,
                             candidate.DownloadUri,
                             candidate.Language,
-                            candidate.Format)),
+                            candidate.Format,
+                            request.IsAutomated ? deduplicationKey : null,
+                            displayName: SearchResultMatcher.FormatDisplayName(
+                                name,
+                                candidate.Match.Kind),
+                            mediaCode: queryPlan.MediaCode,
+                            isAutomated: request.IsAutomated)),
                         Name = SearchResultMatcher.FormatDisplayName(name, candidate.Match.Kind),
                         ProviderName = Name,
-                        Language = candidate.Language,
+                        ThreeLetterISOLanguageName = candidate.Language,
                         Format = candidate.Format,
                         IsHashMatch = candidate.Match.Kind == SearchMatchKind.Cid
                     });
@@ -165,7 +192,18 @@ namespace Emby.Subtitle.ThunderCat.Providers
                     }
                 }
 
-                _logger.Info($"[Thunder] Search completed with {ordered.Count} result(s).");
+                var topResults = string.Join(
+                    " | ",
+                    ordered
+                        .Take(5)
+                        .Select((result, index) =>
+                            $"#{index + 1} {LogValue.Sanitize(result.Name, 120)} " +
+                            $"[{result.ThreeLetterISOLanguageName}, format={result.Format}]"));
+                _logger.LogInformation(
+                    "[Thunder] Search completed: language={Language}, resultCount={ResultCount}, topResults={TopResults}.",
+                    requestedLanguage,
+                    ordered.Count,
+                    topResults);
                 return ordered;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -174,7 +212,7 @@ namespace Emby.Subtitle.ThunderCat.Providers
             }
             catch (Exception ex)
             {
-                _logger.Error($"[Thunder] Search failed: {ex.GetType().Name}.");
+                _logger.LogError(ex, "[Thunder] Search failed.");
                 return Array.Empty<RemoteSubtitleInfo>();
             }
         }
@@ -185,12 +223,21 @@ namespace Emby.Subtitle.ThunderCat.Providers
 
             if (!_tokenStore.TryResolve(id, ProviderKey, out var request))
             {
-                _logger.Warn("[Thunder] Rejected an invalid or expired download token.");
-                return new SubtitleResponse();
+                _logger.LogWarning("[Thunder] Rejected an invalid or expired download token.");
+                throw new InvalidOperationException("The Thunder download token is invalid or has expired.");
             }
 
             try
             {
+                _logger.LogInformation(
+                    "[Thunder] Download attempt: item={ItemName}, mediaCode={MediaCode}, requestedLanguage={RequestedLanguage}, language={Language}, format={Format}, downloadHost={DownloadHost}.",
+                    LogValue.Sanitize(request.DisplayName),
+                    LogValue.Sanitize(request.MediaCode, 64),
+                    LogValue.Sanitize(request.Language, 32),
+                    request.Language,
+                    request.Format,
+                    request.Uri.Host);
+
                 var bytes = await SafeHttpClient.GetBytesAsync(
                         request.Uri,
                         DownloadPolicy,
@@ -200,11 +247,30 @@ namespace Emby.Subtitle.ThunderCat.Providers
                         PluginMetadata.UserAgent,
                         cancellationToken)
                     .ConfigureAwait(false);
-                if (!SubtitleContentValidator.IsSupportedText(bytes))
+                var inspection = SubtitleContentValidator.Inspect(bytes);
+                if (!inspection.IsSupportedText)
                 {
-                    _logger.Warn("[Thunder] Rejected a non-text or upstream error response.");
-                    return new SubtitleResponse();
+                    _logger.LogWarning(
+                        "[Thunder] Candidate rejected: item={ItemName}, language={Language}, reason={Reason}, replacementCharacters={ReplacementCharacters}, mojibakeMarkers={MojibakeMarkers}, bytes={Bytes}.",
+                        LogValue.Sanitize(request.DisplayName),
+                        request.Language,
+                        inspection.RejectionReason,
+                        inspection.ReplacementCharacterCount,
+                        inspection.MojibakeMarkerCount,
+                        bytes.Length);
+                    throw new InvalidDataException(
+                        "Thunder returned unusable subtitle content: " +
+                        inspection.RejectionReason);
                 }
+
+                AutomaticDownloadGuard.MarkSuccessfulDownload(request.DeduplicationKey);
+                _logger.LogInformation(
+                    "[Thunder] Selected subtitle: item={ItemName}, mediaCode={MediaCode}, language={Language}, format={Format}, bytes={Bytes}, replacementCharacters=0.",
+                    LogValue.Sanitize(request.DisplayName),
+                    LogValue.Sanitize(request.MediaCode, 64),
+                    request.Language,
+                    request.Format,
+                    bytes.Length);
 
                 return new SubtitleResponse
                 {
@@ -219,8 +285,8 @@ namespace Emby.Subtitle.ThunderCat.Providers
             }
             catch (Exception ex)
             {
-                _logger.Error($"[Thunder] Download failed: {ex.GetType().Name}.");
-                return new SubtitleResponse();
+                _logger.LogError(ex, "[Thunder] Download failed.");
+                throw;
             }
         }
 
@@ -255,15 +321,12 @@ namespace Emby.Subtitle.ThunderCat.Providers
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            ThunderSubtitleResponse payload;
-            using (var stream = new MemoryStream(responseBytes, false))
-            {
-                payload = _jsonSerializer.DeserializeFromStream<ThunderSubtitleResponse>(stream);
-            }
+            using var stream = new MemoryStream(responseBytes, false);
+            var payload = JsonSerializer.Deserialize<ThunderSubtitleResponse>(stream, JsonOptions);
 
             if (payload == null || payload.Code != 0 || payload.Data == null)
             {
-                _logger.Warn("[Thunder] Upstream response was unsuccessful or missing data.");
+                _logger.LogWarning("[Thunder] Upstream response was unsuccessful or missing data.");
                 return Array.Empty<RankedCandidate>();
             }
 
@@ -343,12 +406,12 @@ namespace Emby.Subtitle.ThunderCat.Providers
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.Warn("[Thunder] CID calculation timed out; continuing without CID.");
+                    _logger.LogWarning("[Thunder] CID calculation timed out; continuing without CID.");
                     return null;
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn($"[Thunder] CID calculation failed: {ex.GetType().Name}.");
+                    _logger.LogWarning(ex, "[Thunder] CID calculation failed.");
                     return null;
                 }
                 finally

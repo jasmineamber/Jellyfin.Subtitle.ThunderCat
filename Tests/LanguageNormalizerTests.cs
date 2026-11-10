@@ -1,6 +1,6 @@
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Utils;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class LanguageNormalizerTests
 {
@@ -9,9 +9,9 @@ public sealed class LanguageNormalizerTests
     [InlineData("zho", "chi")]
     [InlineData("en", "eng")]
     [InlineData("deu", "ger")]
-    public void NormalizeForEmby_UsesStableThreeLetterCodes(string input, string expected)
+    public void NormalizeForJellyfin_UsesStableThreeLetterCodes(string input, string expected)
     {
-        Assert.Equal(expected, LanguageNormalizer.NormalizeForEmby(input));
+        Assert.Equal(expected, LanguageNormalizer.NormalizeForJellyfin(input));
     }
 
     [Fact]
@@ -85,4 +85,34 @@ public sealed class LanguageNormalizerTests
             LanguageNormalizer.ReportsRequestedLanguage(requested, new[] { reported }));
     }
 
+    [Fact]
+    public void GetSubtitleCatLanguagePreferences_DefaultChinesePrefersSimplified()
+    {
+        var preferences = LanguageNormalizer.GetSubtitleCatLanguagePreferences("chi");
+
+        Assert.Equal(
+            new[]
+            {
+                "zh-CN",
+                "zh-Hans",
+                "zh",
+                "chi",
+                "zho",
+                "zh-TW",
+                "zh-Hant",
+                "zh-HK"
+            },
+            preferences);
+    }
+
+    [Fact]
+    public void GetSubtitleCatLanguagePreferences_ExplicitTraditionalKeepsTraditionalFirst()
+    {
+        var preferences = LanguageNormalizer.GetSubtitleCatLanguagePreferences("zh-TW");
+
+        Assert.Equal("zh-TW", preferences[0]);
+        Assert.True(
+            preferences.ToList().IndexOf("zh-TW") <
+            preferences.ToList().IndexOf("zh-CN"));
+    }
 }

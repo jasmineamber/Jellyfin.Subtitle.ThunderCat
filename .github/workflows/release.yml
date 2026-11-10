@@ -5,80 +5,118 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  build:
+  publish:
+    name: Build, release, and update manifest
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - name: Checkout
+      - name: Checkout tag
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 8.0.x
           cache: true
           cache-dependency-path: |
             **/*.csproj
             nuget.config
 
-      - name: Verify tag matches project version
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine and verify version
+        id: version
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(python3 -c 'import xml.etree.ElementTree as ET; print(ET.parse("Emby.Subtitle.ThunderCat.csproj").getroot().findtext("PropertyGroup/Version"))')"
+          VERSION="$(python3 -c 'import xml.etree.ElementTree as ET; print(ET.parse("Jellyfin.Plugin.ThunderCat.csproj").getroot().findtext("PropertyGroup/Version"))')"
           test "${GITHUB_REF_NAME}" = "v${VERSION}"
+          echo "value=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-      - name: Restore release baseline
-        run: dotnet restore Emby.Subtitle.ThunderCat.sln -p:EmbySdkVersion=4.8.11
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.ThunderCat.sln -p:JellyfinVersion=10.10.7
 
-      - name: Build and test release baseline
-        run: dotnet test Emby.Subtitle.ThunderCat.sln --configuration Release --no-restore -p:EmbySdkVersion=4.8.11 --warnaserror
+      - name: Build and test
+        run: >-
+          dotnet test Jellyfin.Plugin.ThunderCat.sln
+          --configuration Release
+          --no-restore
+          -p:JellyfinVersion=10.10.7
+          --warnaserror
 
-      - name: Package allowlisted files
+      - name: Package allowlisted plugin files
         shell: bash
         run: |
           set -euo pipefail
-          DLL="bin/Release/netstandard2.0/Emby.Subtitle.ThunderCat.dll"
+          VERSION="${{ steps.version.outputs.value }}"
+          DLL="bin/Release/net8.0/Jellyfin.Plugin.ThunderCat.dll"
+          ZIP="artifacts/Jellyfin.Plugin.ThunderCat-v${VERSION}.zip"
           test -f "${DLL}"
 
           mkdir -p artifacts/package
           cp "${DLL}" artifacts/package/
+          (cd artifacts/package && zip -X -9 "../$(basename "${ZIP}")" Jellyfin.Plugin.ThunderCat.dll)
 
-          ZIP="artifacts/Emby.Subtitle.ThunderCat-${GITHUB_REF_NAME}.zip"
-          (cd artifacts/package && zip -X -9 "../$(basename "${ZIP}")" Emby.Subtitle.ThunderCat.dll)
-
-          test "$(unzip -Z1 "${ZIP}")" = "Emby.Subtitle.ThunderCat.dll"
+          test "$(unzip -Z1 "${ZIP}")" = "Jellyfin.Plugin.ThunderCat.dll"
           (cd artifacts && sha256sum "$(basename "${ZIP}")" > "$(basename "${ZIP}").sha256")
 
-      - name: Upload tested release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ github.ref_name }}
-          path: |
-            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip
-            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip.sha256
-          if-no-files-found: error
+      - name: Generate repository manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.value }}"
+          ZIP="artifacts/Jellyfin.Plugin.ThunderCat-v${VERSION}.zip"
+          mkdir -p artifacts/dist
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+          MANIFEST_ARGS=(
+            --zip "${ZIP}"
+            --output artifacts/dist/manifest.json
+            --repository "${GITHUB_REPOSITORY}"
+            --tag "${GITHUB_REF_NAME}"
+          )
+          if git fetch origin dist; then
+            git show origin/dist:manifest.json > artifacts/dist/existing.json
+            MANIFEST_ARGS+=(--existing-manifest artifacts/dist/existing.json)
+          fi
+          python3 scripts/generate_manifest.py "${MANIFEST_ARGS[@]}"
 
-    steps:
-      - name: Download tested release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: release-${{ github.ref_name }}
-          path: artifacts
-
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
-            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip
-            artifacts/Emby.Subtitle.ThunderCat-${{ github.ref_name }}.zip.sha256
+            artifacts/Jellyfin.Plugin.ThunderCat-v${{ steps.version.outputs.value }}.zip
+            artifacts/Jellyfin.Plugin.ThunderCat-v${{ steps.version.outputs.value }}.zip.sha256
           generate_release_notes: true
+
+      - name: Publish dist manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if git rev-parse --verify origin/dist >/dev/null 2>&1; then
+            git checkout -B dist origin/dist
+          else
+            git checkout --orphan dist
+          fi
+
+          git rm -rf . || true
+          cp artifacts/dist/manifest.json manifest.json
+          git add manifest.json
+          git commit -m "chore: publish ThunderCat ${{ steps.version.outputs.value }}"
+          git push origin dist

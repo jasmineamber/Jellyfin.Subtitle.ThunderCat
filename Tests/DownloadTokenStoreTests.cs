@@ -1,6 +1,6 @@
-using Emby.Subtitle.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class DownloadTokenStoreTests
 {
@@ -9,11 +9,24 @@ public sealed class DownloadTokenStoreTests
     {
         var store = new DownloadTokenStore();
         var uri = new Uri("https://subtitle.v.geilijiasu.com/AA/BB/test.srt");
-        var token = store.Create(new DownloadRequest("Thunder", uri, "chi", "srt"));
+        var fallbackUri = new Uri("https://subtitlecat.com/subs/2/fallback.html");
+        var token = store.Create(new DownloadRequest(
+            "Thunder",
+            uri,
+            "chi",
+            "srt",
+            candidateUris: new[] { uri, fallbackUri },
+            displayName: "[ID] Test",
+            mediaCode: "TEST-001",
+            isAutomated: true));
 
         Assert.DoesNotContain("geilijiasu", token, StringComparison.OrdinalIgnoreCase);
         Assert.True(store.TryResolve(token, "Thunder", out var request));
         Assert.Equal(uri, request.Uri);
+        Assert.Equal(new[] { uri, fallbackUri }, request.CandidateUris);
+        Assert.Equal("[ID] Test", request.DisplayName);
+        Assert.Equal("TEST-001", request.MediaCode);
+        Assert.True(request.IsAutomated);
         Assert.False(store.TryResolve(token, "SubtitleCat", out _));
         Assert.False(store.TryResolve(token + "x", "Thunder", out _));
     }

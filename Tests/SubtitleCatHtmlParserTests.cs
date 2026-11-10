@@ -1,6 +1,6 @@
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Utils;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class SubtitleCatHtmlParserTests
 {
@@ -24,6 +24,7 @@ public sealed class SubtitleCatHtmlParserTests
         var chinese = SubtitleCatHtmlParser.FindDownloadLink(html, baseUri, "zh-Hans");
         Assert.NotNull(chinese);
         Assert.Equal("chi", chinese!.Language);
+        Assert.Equal("zh-CN", chinese.Variant);
         Assert.EndsWith("-zh-CN.srt", chinese.Uri.AbsolutePath, StringComparison.Ordinal);
 
         var english = SubtitleCatHtmlParser.FindDownloadLink(html, baseUri, "eng");
@@ -31,6 +32,49 @@ public sealed class SubtitleCatHtmlParserTests
         Assert.Equal("eng", english!.Language);
 
         Assert.Null(SubtitleCatHtmlParser.FindDownloadLink(html, baseUri, "fr"));
+    }
+
+    [Fact]
+    public void FindDownloadLinks_ReturnsFallbackVariantsInPreferenceOrder()
+    {
+        const string html = """
+            <a id="download_zh-TW" href="/subs/102/Test-zh-TW.srt">Traditional</a>
+            <a id="download_zh-CN" href="/subs/101/Test-zh-CN.srt">Simplified</a>
+            """;
+        var baseUri = new Uri("https://subtitlecat.com/subs/100/Test.html");
+
+        var links = SubtitleCatHtmlParser.FindDownloadLinks(html, baseUri, "chi");
+
+        Assert.Collection(
+            links,
+            link =>
+            {
+                Assert.Equal("chi", link.Language);
+                Assert.Equal("zh-CN", link.Variant);
+                Assert.EndsWith("-zh-CN.srt", link.Uri.AbsolutePath, StringComparison.Ordinal);
+            },
+            link =>
+            {
+                Assert.Equal("chi", link.Language);
+                Assert.Equal("zh-TW", link.Variant);
+                Assert.EndsWith("-zh-TW.srt", link.Uri.AbsolutePath, StringComparison.Ordinal);
+            });
+    }
+
+    [Fact]
+    public void FindDownloadLinkForVariant_SelectsExactLanguageVariant()
+    {
+        const string html = """
+            <a id="download_zh-TW" href="/subs/102/Test-zh-TW.srt">Traditional</a>
+            <a id="download_zh-CN" href="/subs/101/Test-zh-CN.srt">Simplified</a>
+            """;
+        var baseUri = new Uri("https://subtitlecat.com/subs/100/Test.html");
+
+        var link = SubtitleCatHtmlParser.FindDownloadLinkForVariant(html, baseUri, "zh-CN");
+
+        Assert.NotNull(link);
+        Assert.Equal("zh-CN", link!.Variant);
+        Assert.EndsWith("-zh-CN.srt", link.Uri.AbsolutePath, StringComparison.Ordinal);
     }
 
     private static string ReadFixture(params string[] parts)

@@ -1,7 +1,7 @@
 using System.Text;
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Utils;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class SubtitleContentValidatorTests
 {
@@ -36,5 +36,30 @@ public sealed class SubtitleContentValidatorTests
     public void IsSupportedText_RejectsArchives()
     {
         Assert.False(SubtitleContentValidator.IsSupportedText(new byte[] { 0x50, 0x4b, 0x03, 0x04, 0x00 }));
+    }
+
+    [Fact]
+    public void Inspect_RejectsUnicodeReplacementCharacters()
+    {
+        var bytes = Encoding.UTF8.GetBytes(
+            "1\n00:00:01,000 --> 00:00:02,000\n\uFFFD\uFFFD\uFFFD\n");
+
+        var inspection = SubtitleContentValidator.Inspect(bytes);
+
+        Assert.False(inspection.IsSupportedText);
+        Assert.Equal("replacement-characters", inspection.RejectionReason);
+        Assert.Equal(3, inspection.ReplacementCharacterCount);
+    }
+
+    [Theory]
+    [InlineData("1\n00:00:01,000 --> 00:00:02,000\n锟斤拷\n")]
+    [InlineData("1\n00:00:01,000 --> 00:00:02,000\n嚙踝蕭\n")]
+    public void Inspect_RejectsKnownChineseMojibakeMarkers(string content)
+    {
+        var inspection = SubtitleContentValidator.Inspect(Encoding.UTF8.GetBytes(content));
+
+        Assert.False(inspection.IsSupportedText);
+        Assert.Equal("mojibake-markers", inspection.RejectionReason);
+        Assert.True(inspection.MojibakeMarkerCount > 0);
     }
 }

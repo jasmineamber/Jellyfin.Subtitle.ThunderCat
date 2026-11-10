@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal sealed class SearchQueryPlan
     {

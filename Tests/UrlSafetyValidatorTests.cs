@@ -1,8 +1,8 @@
 using System.Net;
 using System.Security;
-using Emby.Subtitle.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class UrlSafetyValidatorTests
 {

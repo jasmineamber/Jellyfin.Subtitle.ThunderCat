@@ -1,6 +1,6 @@
 using MediaBrowser.Model.Plugins;
 
-namespace Emby.Subtitle.ThunderCat.Configuration
+namespace Jellyfin.Plugin.ThunderCat.Configuration
 {
     public sealed class PluginConfiguration : BasePluginConfiguration
     {

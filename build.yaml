@@ -1,0 +1,21 @@
+name: "ThunderCat Subtitles"
+guid: "9b7dca24-edf8-4155-bbd6-8c2b0f07448d"
+version: 4
+targetAbi: "10.10.7.0"
+framework: "net8.0"
+owner: "drunkleee"
+overview: "SubtitleCat and Thunder subtitle search for Jellyfin"
+description: "Search SubtitleCat and Thunder, rank matches by title and media identifiers, and download subtitles through Jellyfin."
+category: "Subtitles"
+artifacts:
+  - "Jellyfin.Plugin.ThunderCat.dll"
+changelog: |-
+  - Prefer a clean Simplified Chinese subtitle across every ranked SubtitleCat result before falling back to Traditional Chinese.
+  - Reject subtitle downloads containing replacement characters or obvious Chinese mojibake, then continue with the next candidate.
+  - Add structured diagnostics for search keywords, requested language, ranked candidates, download attempts, rejection reasons, and final selection.
+  - Suppress repeated automated downloads of the same language after the first successful save.
+  - Retry alternate SubtitleCat language variants when a preferred download link is unavailable.
+  - Repair SRT files that omit the first cue index so Jellyfin can recognize them.
+  - Propagate provider download failures instead of returning an invalid empty subtitle response.
+  - Migrate the plugin from Emby to Jellyfin 10.10.7.
+  - Preserve SubtitleCat, Thunder, CID matching, security checks, and configuration diagnostics.

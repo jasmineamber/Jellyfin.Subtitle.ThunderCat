@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Emby.Subtitle.ThunderCat.Tests")]
+[assembly: InternalsVisibleTo("Jellyfin.Plugin.ThunderCat.Tests")]

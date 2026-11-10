@@ -1,6 +1,6 @@
-using Emby.Subtitle.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class ProviderHealthCheckerTests
 {
@@ -29,13 +29,17 @@ public sealed class ProviderHealthCheckerTests
     [Fact]
     public void PluginMetadata_DerivesVersionAndUserAgentFromAssembly()
     {
-        Assert.Equal("1.4.1", PluginMetadata.Version);
-        Assert.Contains("ThunderCat/1.4.1", PluginMetadata.UserAgent, StringComparison.Ordinal);
-        Assert.Equal("Emby Server 4.8.11.0", PluginMetadata.CompatibilityBaseline);
+        Assert.Equal("2.0.2", PluginMetadata.Version);
+        Assert.Contains("ThunderCat/2.0.2", PluginMetadata.UserAgent, StringComparison.Ordinal);
+        Assert.Contains(
+            "https://github.com/jasmineamber/Jellyfin.Subtitle.ThunderCat",
+            PluginMetadata.UserAgent,
+            StringComparison.Ordinal);
+        Assert.Equal("Jellyfin Server 10.10.7", PluginMetadata.CompatibilityBaseline);
     }
 
     [Fact]
-    public void ApiRoutes_AreHiddenAdminOnlyGetEndpoints()
+    public void ApiRoutes_RequireSubtitleManagementAndExposeInfoAndHealth()
     {
         var sourcePath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -44,15 +48,14 @@ public sealed class ProviderHealthCheckerTests
             "..",
             "..",
             "Api",
-            "ThunderCatService.cs"));
+            "ThunderCatController.cs"));
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("[Authenticated(Roles = \"Admin\")]", source, StringComparison.Ordinal);
-        Assert.Contains("[Route(\"/ThunderCat/Info\", \"GET\"", source, StringComparison.Ordinal);
-        Assert.Contains("[Route(\"/ThunderCat/Health\", \"GET\"", source, StringComparison.Ordinal);
-        Assert.Contains("IsHidden = true", source, StringComparison.Ordinal);
-        Assert.Contains("IReturn<ThunderCatInfoResponse>", source, StringComparison.Ordinal);
-        Assert.Contains("IReturn<ThunderCatHealthResponse>", source, StringComparison.Ordinal);
+        Assert.Contains("[ApiController]", source, StringComparison.Ordinal);
+        Assert.Contains("[Authorize(Policy = Policies.SubtitleManagement)]", source, StringComparison.Ordinal);
+        Assert.Contains("[Route(\"ThunderCat\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[HttpGet(\"Info\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[HttpGet(\"Health\")]", source, StringComparison.Ordinal);
     }
 
 }

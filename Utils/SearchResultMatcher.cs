@@ -1,6 +1,6 @@
 using System;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal enum SearchMatchKind
     {

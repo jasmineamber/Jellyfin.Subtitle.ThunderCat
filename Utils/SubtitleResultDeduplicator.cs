@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal sealed class SubtitleResultDeduplicator
     {

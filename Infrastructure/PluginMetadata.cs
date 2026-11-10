@@ -1,10 +1,10 @@
 using System;
 
-namespace Emby.Subtitle.ThunderCat.Infrastructure
+namespace Jellyfin.Plugin.ThunderCat.Infrastructure
 {
     internal static class PluginMetadata
     {
-        public const string CompatibilityBaseline = "Emby Server 4.8.11.0";
+        public const string CompatibilityBaseline = "Jellyfin Server 10.10.7";
 
         public static string Version
         {
@@ -16,6 +16,6 @@ namespace Emby.Subtitle.ThunderCat.Infrastructure
         }
 
         public static string UserAgent =>
-            "ThunderCat/" + Version + " (+https://github.com/drunkleee/Emby.Subtitle.ThunderCat)";
+            "ThunderCat/" + Version + " (+https://github.com/jasmineamber/Jellyfin.Subtitle.ThunderCat)";
     }
 }

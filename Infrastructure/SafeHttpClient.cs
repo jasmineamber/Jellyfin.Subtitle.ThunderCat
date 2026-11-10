@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Emby.Subtitle.ThunderCat.Infrastructure
+namespace Jellyfin.Plugin.ThunderCat.Infrastructure
 {
     internal static class SafeHttpClient
     {

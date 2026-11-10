@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class ConfigurationPageTests
 {
@@ -10,10 +10,10 @@ public sealed class ConfigurationPageTests
     private static readonly string PagePath = Path.Combine(ProjectRoot, "Configuration", "configPage.html");
     private static readonly string ControllerPath = Path.Combine(ProjectRoot, "Configuration", "configPage.js");
     private static readonly string PluginPath = Path.Combine(ProjectRoot, "Plugin.cs");
-    private static readonly string ProjectPath = Path.Combine(ProjectRoot, "Emby.Subtitle.ThunderCat.csproj");
+    private static readonly string ProjectPath = Path.Combine(ProjectRoot, "Jellyfin.Plugin.ThunderCat.csproj");
 
     [Fact]
-    public void ConfigurationPage_UsesEmbeddedEmbyController()
+    public void ConfigurationPage_UsesEmbeddedJellyfinModuleController()
     {
         var html = File.ReadAllText(PagePath);
         var controller = File.ReadAllText(ControllerPath);
@@ -24,11 +24,13 @@ public sealed class ConfigurationPageTests
         Assert.True(match.Success);
         Assert.Equal("thundercatconfigjs", match.Groups["name"].Value);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("define(['loading', 'emby-button', 'emby-checkbox']", controller, StringComparison.Ordinal);
-        Assert.Contains("return function (view)", controller, StringComparison.Ordinal);
+        Assert.Contains("export default function (view)", controller, StringComparison.Ordinal);
+        Assert.Contains("Dashboard.showLoadingMsg()", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("define(", controller, StringComparison.Ordinal);
         Assert.Contains($"Name = \"{match.Groups["name"].Value}\"", plugin, StringComparison.Ordinal);
         Assert.Contains(".Configuration.configPage.js", plugin, StringComparison.Ordinal);
         Assert.Contains("EmbeddedResource Include=\"Configuration\\configPage.js\"", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-require=", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,11 +135,11 @@ public sealed class ConfigurationPageTests
     }
 
     [Fact]
-    public void ConfigurationController_ReportsWhenEmbyApiNeverBecomesReady()
+    public void ConfigurationController_ReportsWhenJellyfinApiNeverBecomesReady()
     {
         var controller = File.ReadAllText(ControllerPath);
 
-        Assert.Contains("Emby API 未就绪，请刷新页面", controller, StringComparison.Ordinal);
+        Assert.Contains("Jellyfin API 未就绪，请刷新页面", controller, StringComparison.Ordinal);
         Assert.Contains("setProviderButtonsDisabled(false)", controller, StringComparison.Ordinal);
     }
 }

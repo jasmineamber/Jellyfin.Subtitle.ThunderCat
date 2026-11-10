@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 
-namespace Emby.Subtitle.ThunderCat.Utils
+namespace Jellyfin.Plugin.ThunderCat.Utils
 {
     internal static class LanguageNormalizer
     {
-        public static string NormalizeForEmby(string? language)
+        public static string NormalizeForJellyfin(string? language)
         {
             if (string.IsNullOrWhiteSpace(language))
             {
@@ -73,13 +73,13 @@ namespace Emby.Subtitle.ThunderCat.Utils
         }
 
         public static bool IsChinese(string? language) =>
-            string.Equals(NormalizeForEmby(language), "chi", StringComparison.OrdinalIgnoreCase);
+            string.Equals(NormalizeForJellyfin(language), "chi", StringComparison.OrdinalIgnoreCase);
 
         public static bool ReportsRequestedLanguage(
             string? requestedLanguage,
             IEnumerable<string>? reportedLanguages)
         {
-            var requested = NormalizeForEmby(requestedLanguage);
+            var requested = NormalizeForJellyfin(requestedLanguage);
             if (reportedLanguages == null)
             {
                 return false;
@@ -101,7 +101,7 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
         public static string ResolveReportedLanguage(string? requestedLanguage, IEnumerable<string>? reportedLanguages)
         {
-            var requested = NormalizeForEmby(requestedLanguage);
+            var requested = NormalizeForJellyfin(requestedLanguage);
             string? firstRecognized = null;
             if (reportedLanguages != null)
             {
@@ -172,7 +172,7 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
             if (candidates.Count == 0)
             {
-                var normalized = NormalizeForEmby(value);
+                var normalized = NormalizeForJellyfin(value);
                 if (IsKnownLanguage(normalized))
                 {
                     candidates.Add(normalized);
@@ -204,11 +204,59 @@ namespace Emby.Subtitle.ThunderCat.Utils
 
         public static IReadOnlyList<string> GetSubtitleCatCandidates(string? language)
         {
+            return GetSubtitleCatLanguagePreferences(language);
+        }
+
+        public static IReadOnlyList<string> GetSubtitleCatLanguagePreferences(string? language)
+        {
             var requested = string.IsNullOrWhiteSpace(language) ? "zh-CN" : language!.Trim();
-            switch (NormalizeForEmby(requested))
+            switch (NormalizeForJellyfin(requested))
             {
                 case "chi":
-                    return new[] { requested, "zh-CN", "zh-Hans", "zh-TW", "zh-Hant", "zh-HK", "zho", "chi", "zh" };
+                    var requestedLower = requested.ToLowerInvariant();
+                    if (requestedLower is "zh-tw" or "zh-hk" or "zh-hant" or "cht")
+                    {
+                        return Distinct(new[]
+                        {
+                            requested,
+                            "zh-TW",
+                            "zh-Hant",
+                            "zh-HK",
+                            "zh-CN",
+                            "zh-Hans",
+                            "zh",
+                            "chi",
+                            "zho"
+                        });
+                    }
+
+                    if (requestedLower is "zh-cn" or "zh-hans" or "chs")
+                    {
+                        return Distinct(new[]
+                        {
+                            requested,
+                            "zh-CN",
+                            "zh-Hans",
+                            "zh",
+                            "chi",
+                            "zho",
+                            "zh-TW",
+                            "zh-Hant",
+                            "zh-HK"
+                        });
+                    }
+
+                    return new[]
+                    {
+                        "zh-CN",
+                        "zh-Hans",
+                        "zh",
+                        "chi",
+                        "zho",
+                        "zh-TW",
+                        "zh-Hant",
+                        "zh-HK"
+                    };
                 case "eng":
                     return new[] { requested, "en", "eng" };
                 case "spa":
@@ -230,6 +278,21 @@ namespace Emby.Subtitle.ThunderCat.Utils
                 default:
                     return new[] { requested };
             }
+        }
+
+        private static List<string> Distinct(IEnumerable<string> values)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value) && seen.Add(value))
+                {
+                    result.Add(value);
+                }
+            }
+
+            return result;
         }
     }
 }

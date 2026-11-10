@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Emby.Subtitle.ThunderCat.Models
+namespace Jellyfin.Plugin.ThunderCat.Models
 {
     public sealed class ThunderSubtitleResponse
     {

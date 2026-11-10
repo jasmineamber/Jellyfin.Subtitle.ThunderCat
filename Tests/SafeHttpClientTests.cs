@@ -1,7 +1,7 @@
 using System.Net.Http;
-using Emby.Subtitle.ThunderCat.Infrastructure;
+using Jellyfin.Plugin.ThunderCat.Infrastructure;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class SafeHttpClientTests
 {

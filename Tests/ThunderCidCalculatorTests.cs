@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
-using Emby.Subtitle.ThunderCat.Utils;
+using Jellyfin.Plugin.ThunderCat.Utils;
 
-namespace Emby.Subtitle.ThunderCat.Tests;
+namespace Jellyfin.Plugin.ThunderCat.Tests;
 
 public sealed class ThunderCidCalculatorTests
 {

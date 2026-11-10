@@ -1,24 +1,24 @@
 using System;
 using System.Collections.Generic;
-using Emby.Subtitle.ThunderCat.Configuration;
+using Jellyfin.Plugin.ThunderCat.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 
-namespace Emby.Subtitle.ThunderCat
+namespace Jellyfin.Plugin.ThunderCat
 {
-    public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
+    public sealed class ThunderCatPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         private static readonly Guid PluginId = new Guid("9b7dca24-edf8-4155-bbd6-8c2b0f07448d");
 
-        public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+        public ThunderCatPlugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
         }
 
-        public static Plugin Instance { get; private set; } = null!;
+        public static ThunderCatPlugin Instance { get; private set; } = null!;
 
         public override string Name => "ThunderCat Subtitles";
 
@@ -30,7 +30,7 @@ namespace Emby.Subtitle.ThunderCat
             {
                 new PluginPageInfo
                 {
-                    Name = Name,
+                    Name = "thundercat",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
                 },
                 new PluginPageInfo
