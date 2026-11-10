@@ -15,7 +15,7 @@
     <Deterministic>true</Deterministic>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <NoWarn>$(NoWarn);CA1510;CA1512;CA1835;CA1848;CA1850;CA1865;CA2016;CA2249</NoWarn>
+    <NoWarn>$(NoWarn);CA1510;CA1512;CA1835;CA1848;CA1850;CA1865;CA1873;CA2016;CA2249</NoWarn>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">10.10.7</JellyfinVersion>
   </PropertyGroup>
